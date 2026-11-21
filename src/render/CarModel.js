@@ -17,12 +17,12 @@ function nameLabel(name, color) {
 }
 
 // side-profile shapes are drawn in (x = along the car, +x = nose; y = height) and extruded across the width
-function profileGeometry(points, width, bevel = 0.06) {
+export function profileGeometry(points, width, bevel = 0.06) {
   const shape = new THREE.Shape();
   points.forEach(([x, y], i) => (i ? shape.lineTo(x, y) : shape.moveTo(x, y)));
   const g = new THREE.ExtrudeGeometry(shape, { depth: width - bevel * 2, bevelEnabled: true, bevelThickness: bevel, bevelSize: bevel, bevelSegments: 1, curveSegments: 1 });
   g.translate(0, 0, -(width - bevel * 2) / 2);
-  g.rotateY(-Math.PI / 2);     // +x (nose) -> -z (forward), extrusion axis -> x (width)
+  g.rotateY(Math.PI / 2);      // +x (nose) -> -z (forward), extrusion axis -> x (width)
   return g;
 }
 
