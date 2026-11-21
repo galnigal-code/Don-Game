@@ -1,147 +1,197 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { DEG, wrapPi, gravityToScreen, rollAngle, rollFromMotion, smoothAngle, steerFromRoll } from '../../src/input/tiltMath.js';
+import { DEG, wrapPi, rollAngle, rollFromMotion, smoothAngle, steerFromRoll } from '../../src/input/tiltMath.js';
+import { TiltInput } from '../../src/input/TiltInput.js';
+import { createRng } from '../../src/sim/rng.js';
+import { reading } from '../helpers/phone.js';
 
-const G = 9.81;
-// World-up vector in device frame for a device rotated CLOCKWISE by phi (as the user sees it)
-// while its screen is at orientation `angle`. (inverse of gravityToScreen)
-function deviceUp(phiDeg, angle) {
-  const p = phiDeg * DEG, t = angle * DEG;
-  const gs = { x: -Math.sin(p) * G, y: Math.cos(p) * G };            // up in screen frame
-  return { x: gs.x * Math.cos(t) + gs.y * Math.sin(t), y: -gs.x * Math.sin(t) + gs.y * Math.cos(t) };
-}
 const OPTS = { deadZone: 3 * DEG, maxAngle: 30 * DEG };
+const RESTS = [0, 90, 180, 270];
 
-describe('gravityToScreen', () => {
-  it('upright phone has world-up = screen-up in all four orientations', () => {
-    const ups = { 0: { x: 0, y: G }, 90: { x: G, y: 0 }, 180: { x: 0, y: -G }, 270: { x: -G, y: 0 } };
-    for (const [angle, u] of Object.entries(ups)) {
-      const g = gravityToScreen(u, Number(angle));
-      expect(g.x).toBeCloseTo(0, 6); expect(g.y).toBeCloseTo(G, 6);
+describe('tilt math', () => {
+  it('clockwise rotation INCREASES the roll for every way of holding the phone and every sensor sign convention', () => {
+    for (const rest of RESTS) for (const flipSign of [false, true]) {
+      let prev = -Infinity, base = null;
+      for (let cw = -60; cw <= 60; cw += 10) {
+        const roll = rollFromMotion(reading(rest, cw, { flipSign }), false).roll;
+        if (base === null) base = roll;
+        const unwrapped = base + wrapPi(roll - base);
+        expect(unwrapped, `rest ${rest} flip ${flipSign} cw ${cw}`).toBeGreaterThan(prev);
+        prev = unwrapped;
+      }
     }
   });
-});
-
-describe('roll / steering direction', () => {
-  it('clockwise rotation (right side down) gives positive roll and steers RIGHT, in every orientation', () => {
-    for (const angle of [0, 90, 180, 270]) {
-      const { roll } = rollFromMotion(deviceUp(20, angle), angle, false);
-      expect(roll / DEG).toBeCloseTo(20, 4);
-      expect(steerFromRoll(roll, 0, OPTS)).toBeGreaterThan(0);
+  it('the roll difference equals the physical rotation (so zero + steering are exact)', () => {
+    for (const rest of RESTS) {
+      const r0 = rollFromMotion(reading(rest, 0)).roll, r1 = rollFromMotion(reading(rest, 25)).roll;
+      expect(wrapPi(r1 - r0) / DEG).toBeCloseTo(25, 4);
     }
   });
-  it('counter-clockwise rotation steers LEFT, in every orientation', () => {
-    for (const angle of [0, 90, 180, 270]) {
-      const { roll } = rollFromMotion(deviceUp(-20, angle), angle, false);
-      expect(roll / DEG).toBeCloseTo(-20, 4);
-      expect(steerFromRoll(roll, 0, OPTS)).toBeLessThan(0);
-    }
+  it('iOS reports the opposite sign; the correction keeps the same roll', () => {
+    const a = reading(90, 20), b = reading(90, 20, { flipSign: true });
+    expect(wrapPi(rollFromMotion(b, true).roll - rollFromMotion(a, false).roll)).toBeCloseTo(0, 6);
   });
-  it('iOS reports the inverted sign and is corrected', () => {
-    const u = deviceUp(25, 90);
-    const ios = rollFromMotion({ x: -u.x, y: -u.y }, 90, true);
-    expect(ios.roll / DEG).toBeCloseTo(25, 4);
+  it('negating both axes only shifts the angle by 180 degrees, it never flips the direction', () => {
+    const d = (flip) => wrapPi(rollFromMotion(reading(0, 25, { flipSign: flip })).roll - rollFromMotion(reading(0, 0, { flipSign: flip })).roll);
+    expect(d(true)).toBeCloseTo(d(false), 6);
+  });
+  it('a mirrored axis (the only hardware-like fault) flips the direction', () => {
+    const d = wrapPi(rollFromMotion(reading(0, 25, { mirrorX: true })).roll - rollFromMotion(reading(0, 0, { mirrorX: true })).roll);
+    expect(d).toBeLessThan(0);
   });
   it('reports a small planar component when the phone lies flat', () => {
-    expect(rollFromMotion({ x: 0.3, y: 0.2, z: 9.8 }, 0, false).planar).toBeLessThan(1);
-    expect(rollFromMotion(deviceUp(0, 90), 90, false).planar).toBeCloseTo(G, 4);
+    expect(rollFromMotion({ x: 0.3, y: 0.2 }).planar).toBeLessThan(1);
+    expect(rollFromMotion(reading(90, 0)).planar).toBeCloseTo(9.81, 4);
   });
-});
-
-describe('steerFromRoll', () => {
-  it('has a dead zone', () => {
+  it('rollAngle of straight-up is 0', () => { expect(rollAngle({ x: 0, y: 9.8 })).toBeCloseTo(0, 9); });
+  it('steerFromRoll: dead zone, saturation, zero offset, invert, wrap-around', () => {
     expect(steerFromRoll(2 * DEG, 0, OPTS)).toBe(0);
-    expect(steerFromRoll(-2.9 * DEG, 0, OPTS)).toBe(0);
-  });
-  it('saturates at maxAngle and is symmetric', () => {
     expect(steerFromRoll(30 * DEG, 0, OPTS)).toBeCloseTo(1, 6);
     expect(steerFromRoll(80 * DEG, 0, OPTS)).toBe(1);
     expect(steerFromRoll(-80 * DEG, 0, OPTS)).toBe(-1);
     expect(steerFromRoll(16.5 * DEG, 0, OPTS)).toBeCloseTo(0.5, 6);
-  });
-  it('is relative to the calibrated zero', () => {
-    expect(steerFromRoll(40 * DEG, 40 * DEG, OPTS)).toBe(0);
     expect(steerFromRoll(70 * DEG, 40 * DEG, OPTS)).toBeCloseTo(1, 6);
-    expect(steerFromRoll(10 * DEG, 40 * DEG, OPTS)).toBeCloseTo(-1, 6);
-  });
-  it('can be inverted', () => {
     expect(steerFromRoll(20 * DEG, 0, { ...OPTS, invert: true })).toBeLessThan(0);
+    expect(steerFromRoll(-175 * DEG, 175 * DEG, OPTS)).toBeGreaterThan(0);
   });
-  it('handles angle wrap-around', () => {
-    expect(steerFromRoll(-175 * DEG, 175 * DEG, OPTS)).toBeGreaterThan(0);   // 10° clockwise across the ±180° seam
-  });
-});
-
-describe('helpers', () => {
-  it('wrapPi', () => { expect(wrapPi(3 * Math.PI)).toBeCloseTo(Math.PI, 6); expect(wrapPi(-3.5 * Math.PI)).toBeCloseTo(0.5 * Math.PI, 6); });
-  it('smoothAngle moves towards the target the short way round', () => {
+  it('helpers', () => {
+    expect(wrapPi(3 * Math.PI)).toBeCloseTo(Math.PI, 6);
     expect(smoothAngle(179 * DEG, -179 * DEG, 0.5) / DEG).toBeCloseTo(180, 4);
-    expect(smoothAngle(0, 10 * DEG, 0.25) / DEG).toBeCloseTo(2.5, 6);
   });
-  it('rollAngle of straight-up is 0', () => { expect(rollAngle({ x: 0, y: 9.8 })).toBeCloseTo(0, 9); });
 });
 
-import { TiltInput } from '../../src/input/TiltInput.js';
+/* ------------------------------------------------------------------------------------------------------------- */
+/* The protocol, driven by a simulated phone. THE CONTRACT: physically clockwise => steer > 0, counter-clockwise => steer < 0 */
 
-describe('direction test (learns what "right" means from the player)', () => {
-  let clock = 1000;
-  const realNow = performance.now.bind(performance);
-  beforeEach(() => { clock = 1000; performance.now = () => clock; });
-  afterEach(() => { performance.now = realNow; });
+let clock = 1000;
+const realNow = performance.now.bind(performance);
+const realScreen = globalThis.screen;
+beforeEach(() => { clock = 1000; performance.now = () => clock; globalThis.screen = { orientation: { angle: 0 } }; });
+afterEach(() => { performance.now = realNow; globalThis.screen = realScreen; });
 
-  // feed the sensor for `ms` milliseconds at 60 Hz with a phone rotated `deg` degrees clockwise
-  // mirrorX = a device whose x axis is reported mirrored (the only kind of fault that flips the steering direction;
-  // negating BOTH axes, as iOS does, only shifts the zero angle by 180 degrees)
-  function feed(t, deg, angle = 0, ms = 1000, mirrorX = false) {
-    const u = deviceUp(deg, angle);
-    for (let i = 0; i < ms / 16; i++) {
-      clock += 16;
-      t.onMotion({ accelerationIncludingGravity: { x: mirrorX ? -u.x : u.x, y: u.y, z: 0 } });
+/** A simulated phone + player. `rest` = how the phone is held (0/90/180/270), `cw` = extra clockwise turn in degrees. */
+function rig(opts = {}) {
+  const t = new TiltInput();
+  t.isIOS = false;
+  const me = { t, rest: opts.rest ?? 0, cw: 0, remap: 0 };
+  const sample = () => {
+    clock += 16;
+    let u = reading(me.rest, me.cw, opts);
+    if (me.remap) { const a = me.remap * DEG; u = { x: u.x * Math.cos(a) - u.y * Math.sin(a), y: u.x * Math.sin(a) + u.y * Math.cos(a), z: 0 }; }
+    t.onMotion({ accelerationIncludingGravity: u });
+    t.updateProtocol();
+  };
+  me.hold = (ms) => { for (let i = 0; i < ms / 16; i++) sample(); };
+  me.to = (cw, ms = 400) => { const from = me.cw, n = Math.max(2, Math.round(ms / 16)); for (let i = 1; i <= n; i++) { me.cw = from + (cw - from) * i / n; sample(); } me.cw = cw; };
+  me.rotateScreen = (angle, remapDeg = 0) => { globalThis.screen.orientation.angle = angle; me.remap = remapDeg; sample(); };   // OS rotates the UI (and some browsers re-express the axes)
+  me.protocol = (tilt = 22) => { me.hold(1200); me.to(tilt, 400); me.hold(800); me.to(-tilt, 700); me.hold(800); me.to(0, 500); me.hold(1100); };
+  me.contract = () => {
+    const out = {};
+    for (const cw of [22, -22, 0]) { me.to(cw, 300); me.hold(500); out[cw] = t.steer; }
+    return out;
+  };
+  return me;
+}
+const expectContract = (m, label = '') => {
+  const s = m.contract();
+  expect(s[22], `${label} clockwise -> right`).toBeGreaterThan(0.2);
+  expect(s[-22], `${label} counter-clockwise -> left`).toBeLessThan(-0.2);
+  expect(Math.abs(s[0]), `${label} middle -> straight`).toBeLessThan(0.1);
+};
+
+describe('guided calibration protocol', () => {
+  it('walks neutral -> right -> left -> centre -> done and satisfies the contract', () => {
+    const m = rig(); m.t.beginProtocol(); m.hold(100);
+    expect(m.t.step).toBe('neutral'); expect(m.t.ready).toBe(false);
+    m.hold(1200); expect(m.t.step).toBe('right');
+    m.to(22); m.hold(800); expect(m.t.step).toBe('left');
+    m.to(-22, 700); m.hold(800); expect(m.t.step).toBe('center');
+    m.to(0); m.hold(1100); expect(m.t.step).toBe('done'); expect(m.t.ready).toBe(true);
+    expectContract(m);
+  });
+  it('holds for every way of holding the phone and every sensor convention', () => {
+    for (const rest of RESTS) for (const o of [{}, { flipSign: true }, { mirrorX: true }, { mirrorX: true, flipSign: true }]) {
+      const m = rig({ rest, ...o }); m.t.isIOS = !!o.flipSign; m.t.beginProtocol();
+      m.protocol(); expect(m.t.step, JSON.stringify({ rest, ...o })).toBe('done');
+      expectContract(m, JSON.stringify({ rest, ...o }));
     }
-  }
-  function pose(mirrorX, angle) {
-    const t = new TiltInput();
-    t.isIOS = false;
-    feed(t, 0, angle, 800, mirrorX);
-    t.beginDirectionTest();
-    return t;
-  }
-  it('keeps the default when the sensor agrees (tilting right gives positive roll)', () => {
-    const t = pose(false, 0);
-    feed(t, 20, 0, 300); t.updateDirectionTest();
-    expect(t.dirLearned).toBe(true); expect(t.invert).toBe(false);
   });
-  it('flips when the device reports the opposite sign for the same physical motion', () => {
-    for (const angle of [0, 90, 270]) {
-      const t = pose(true, angle);            // a phone whose x axis is mirrored
-      feed(t, 20, angle, 300, true); t.updateDirectionTest();
-      expect(t.dirLearned).toBe(true); expect(t.invert).toBe(true);
-      expect(t.previewSteer).toBeGreaterThan(0);   // and now tilting right steers right
+  it('does not react to movement that is not held (fidgeting, picking the phone up)', () => {
+    const m = rig(); m.t.beginProtocol();
+    for (let i = 0; i < 12; i++) m.to((i % 2 ? 1 : -1) * 40, 250);      // wild waving, never held
+    expect(m.t.step).toBe('neutral');
+    m.to(0, 300); m.protocol(); expect(m.t.step).toBe('done'); expectContract(m);
+  });
+  it('is not fooled by a big move BEFORE the protocol (e.g. before tapping Play)', () => {
+    const m = rig({ rest: 270 }); m.hold(800); m.to(25); m.to(-25, 600); m.to(0); m.hold(700);
+    m.t.beginProtocol(); m.protocol(); expectContract(m);
+  });
+  it('ignores the same side twice, and starts over when the whole phone is repositioned', () => {
+    const m = rig(); m.t.beginProtocol();
+    m.hold(1200); m.to(22); m.hold(800); expect(m.t.step).toBe('left');
+    m.to(24, 300); m.hold(1500); expect(m.t.step).toBe('left');         // same side again: no progress
+    m.rest = 90; m.cw = 0; m.hold(1600);                                  // turned the phone into landscape
+    expect(m.t.step).toBe('neutral');
+    m.protocol(); expect(m.t.step).toBe('done'); expectContract(m);
+  });
+  it('survives the screen rotating under it (frame jump) at every point of the protocol', () => {
+    for (const when of ['neutral', 'right-hold', 'left-hold', 'center', 'done']) for (const to of [90, 270]) {
+      const m = rig({ rest: 0 }); m.t.beginProtocol();
+      const jump = () => m.rotateScreen(to, to === 90 ? 90 : -90);
+      m.hold(1200);
+      if (when === 'neutral') jump();
+      m.to(22, 400);
+      if (when === 'right-hold') jump();
+      m.hold(800); m.to(-22, 700);
+      if (when === 'left-hold') jump();
+      m.hold(800); m.to(0, 500);
+      if (when === 'center') jump();
+      m.hold(1500);
+      if (m.t.step !== 'done') { m.hold(1500); m.protocol(); }           // a restart is allowed, a wrong result is not
+      expect(m.t.step, `${when} ${to}`).toBe('done');
+      if (when === 'done') jump(); m.hold(800);
+      expectContract(m, `${when} ${to}`);
     }
   });
-  it('negating both axes (iOS-style) does not change the direction at all', () => {
-    const t = new TiltInput(); t.isIOS = false;
-    const u0 = deviceUp(0, 0), u1 = deviceUp(20, 0);
-    for (let i = 0; i < 50; i++) { clock += 16; t.onMotion({ accelerationIncludingGravity: { x: -u0.x, y: -u0.y, z: 0 } }); }
-    t.beginDirectionTest();
-    for (let i = 0; i < 20; i++) { clock += 16; t.onMotion({ accelerationIncludingGravity: { x: -u1.x, y: -u1.y, z: 0 } }); }
-    t.updateDirectionTest();
-    expect(t.dirLearned).toBe(true); expect(t.invert).toBe(false);
+  it('steering keeps working after the screen rotates during a race (zero follows the frame)', () => {
+    const m = rig(); m.t.beginProtocol(); m.protocol(); expect(m.t.step).toBe('done');
+    m.rotateScreen(90, 90); m.hold(300);
+    expect(Math.abs(m.t.steer)).toBeLessThan(0.1); expect(m.t.jumps).toBeGreaterThan(0);
+    expectContract(m);
   });
-  it('ignores tiny movements and stops after learning once', () => {
-    const t = pose(false, 0);
-    feed(t, 6, 0, 500); t.updateDirectionTest();
-    expect(t.dirLearned).toBe(false);
-    feed(t, 20, 0, 300); t.updateDirectionTest();
-    expect(t.dirLearned).toBe(true);
-    const inv = t.invert;
-    feed(t, -25, 0, 500); t.updateDirectionTest();
-    expect(t.invert).toBe(inv);
+  it('no jump compensation without a screen rotation (real motion is never "corrected")', () => {
+    const m = rig(); m.t.beginProtocol(); m.protocol();
+    m.to(60, 40); m.hold(300);
+    expect(m.t.jumps).toBe(0); expect(m.t.steer).toBeGreaterThan(0.9);
   });
-  it('manual flip overrides and stops the test', () => {
-    const t = pose(false, 0);
-    t.flipDirection();
-    expect(t.invert).toBe(true); expect(t.dirTest).toBe(false);
-    feed(t, 25, 0, 500); t.updateDirectionTest();
-    expect(t.invert).toBe(true);
+  it('the direction is measured every time and never restored from storage', () => {
+    const a = rig({ mirrorX: true }); a.t.beginProtocol(); a.protocol(); expect(a.t.invert).toBe(true);
+    const b = rig(); expect(b.t.invert).toBe(false);
+  });
+  it('Start is available without a sensor, and the manual flip reverses the mapping', () => {
+    const t = new TiltInput(); t.beginProtocol();
+    expect(t.ready).toBe(true);
+    const m = rig(); m.t.beginProtocol(); m.protocol(); const s0 = m.contract()[22];
+    m.t.flipDirection(); expect(m.contract()[22]).toBeLessThan(0); expect(s0).toBeGreaterThan(0);
+  });
+  it('PROPERTY: for 300 random histories (wandering, repositioning, screen rotations, noise) the contract always holds', () => {
+    for (let seed = 1; seed <= 300; seed++) {
+      const r = createRng(seed);
+      const o = { rest: RESTS[Math.floor(r() * 4)], mirrorX: r() < 0.3, flipSign: r() < 0.3 };
+      const m = rig(o); m.t.isIOS = !!o.flipSign;
+      m.hold(200 + r() * 800);
+      for (let k = 0, n = Math.floor(r() * 6); k < n; k++) {                      // before and during calibration: random junk
+        const kind = r();
+        if (kind < 0.4) m.to((r() - 0.5) * 120, 100 + r() * 500);
+        else if (kind < 0.6) m.hold(r() * 1500);
+        else if (kind < 0.8) { m.rest = RESTS[Math.floor(r() * 4)]; m.cw = 0; m.hold(300); }
+        else m.rotateScreen([0, 90, 180, 270][Math.floor(r() * 4)], [0, 90, -90, 180][Math.floor(r() * 4)]);
+        if (r() < 0.3) m.t.beginProtocol();
+      }
+      m.remap = 0; m.to(0, 200);
+      m.t.beginProtocol();
+      for (let attempt = 0; attempt < 3 && m.t.step !== 'done'; attempt++) m.protocol();
+      expect(m.t.step, `seed ${seed}`).toBe('done');
+      expectContract(m, `seed ${seed} ${JSON.stringify(o)}`);
+    }
   });
 });

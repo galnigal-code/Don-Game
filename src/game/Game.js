@@ -65,6 +65,16 @@ export class Game {
     paintMute();
     mute.addEventListener('pointerdown', (e) => { e.preventDefault(); this.sound.unlock(); this.sound.toggleMute(); paintMute(); });
     uiRoot.appendChild(mute);
+    // emergency "steering feels reversed" switch, available during the race
+    const flip = document.createElement('button');
+    flip.id = 'btn-flip'; flip.textContent = '↔'; flip.setAttribute('aria-label', 'הפוך כיוון היגוי');
+    const toast = document.createElement('div'); toast.id = 'toast';
+    flip.addEventListener('pointerdown', (e) => {
+      e.preventDefault(); this.tilt.flipDirection();
+      toast.textContent = 'כיוון ההיגוי הוחלף'; toast.classList.add('on');
+      clearTimeout(this.toastT); this.toastT = setTimeout(() => toast.classList.remove('on'), 1400);
+    });
+    uiRoot.appendChild(flip); uiRoot.appendChild(toast);
     // any first tap unlocks audio (autopilot / skipCalib flows have no "play" button)
     addEventListener('pointerdown', () => this.sound.unlock(), { once: false, capture: true });
     this.screens = createScreens(uiRoot, this.tilt, { onPlay: () => this.onPlay(), onStart: () => this.onStartRace() });

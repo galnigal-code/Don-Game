@@ -14,20 +14,27 @@ export function createScreens(root, tilt, { onPlay, onStart }) {
     <div class="screen" id="scr-calib" hidden>
       <div class="panel">
         <div class="title">כיול הגה</div>
-        <p>החזק את הטלפון יציב בתנוחה נוחה, כמו הגה.<br><b>עכשיו הטה אותו ימינה</b>, כמו שמסובבים הגה ימינה (הצד הימני של הטלפון יורד), והמשחק ילמד את הכיוון. אחר כך לחץ "התחל".</p>
+        <ol id="calib-steps">
+          <li data-s="neutral"><span class="n"><span class="num">1</span></span>החזק ישר ויציב</li>
+          <li data-s="right"><span class="n"><span class="num">2</span></span>הטה <b>ימינה</b> והחזק</li>
+          <li data-s="left"><span class="n"><span class="num">3</span></span>הטה <b>שמאלה</b> והחזק</li>
+          <li data-s="center"><span class="n"><span class="num">4</span></span>חזור למרכז והחזק</li>
+        </ol>
+        <p class="note">ימינה = הצד הימני של הטלפון יורד, כמו הגה ימינה</p>
         <div class="gauge" dir="ltr">
           <span id="lbl-left">◀ שמאלה</span>
           <div class="gtrack"><div class="gmid"></div><div class="gdot" id="gdot"></div></div>
           <span id="lbl-right">ימינה ▶</span>
         </div>
         <div class="status" id="calib-status"></div>
-        <div class="row"><span>רגישות</span>
+        <div class="row">
           <div class="seg" id="seg-sens">
             <button data-v="low">נמוכה</button><button data-v="normal">רגילה</button><button data-v="high">גבוהה</button>
           </div>
+          <button class="ghost" id="btn-invert">↔ הפוך כיוון</button>
+          <button class="ghost" id="btn-redo">כיול מחדש</button>
         </div>
-        <button class="ghost" id="btn-invert">↔ הפוך כיוון ידנית</button>
-        <button class="big" id="btn-start">התחל</button>
+        <button class="big" id="btn-start" disabled>התחל</button>
         <p class="hint" id="hint-calib" hidden>לחוויה הכי טובה החזק את הטלפון לרוחב</p>
       </div>
     </div>`;
@@ -38,6 +45,7 @@ export function createScreens(root, tilt, { onPlay, onStart }) {
   $('btn-play').addEventListener('click', () => onPlay());
   $('btn-start').addEventListener('click', () => onStart());
   $('btn-invert').addEventListener('click', () => tilt.flipDirection());
+  $('btn-redo').addEventListener('click', () => tilt.beginProtocol());
   $('seg-sens').addEventListener('click', (e) => {
     const v = e.target.dataset?.v;
     if (v) { tilt.sensitivity = v; tilt.save(); refreshSeg(); }
@@ -53,23 +61,44 @@ export function createScreens(root, tilt, { onPlay, onStart }) {
     showCalibrate() {
       visible = 'calib'; menu.hidden = true; calib.hidden = false; openedAt = performance.now();
       refreshSeg(); $('hint-calib').hidden = !portrait();
-      tilt.beginDirectionTest();
+      tilt.beginProtocol();
     },
     hide() { visible = null; menu.hidden = true; calib.hidden = true; },
     /** call every frame */
     update() {
       if (visible !== 'calib') return;
-      tilt.updateDirectionTest();
+      tilt.updateProtocol();
       const s = tilt.previewSteer;
       $('gdot').style.left = (50 + s * 46) + '%';
       $('lbl-left').classList.toggle('lit', s < -0.15);
       $('lbl-right').classList.toggle('lit', s > 0.15);
+      // which side the player is asked to tilt now
+      $('lbl-left').classList.toggle('ask', tilt.active && tilt.step === 'left');
+      $('lbl-right').classList.toggle('ask', tilt.active && tilt.step === 'right');
+      const idx = tilt.stepIndex;
+      el.querySelectorAll('#calib-steps li').forEach((li, i) => {
+        li.classList.toggle('done', tilt.active && i < idx);
+        li.classList.toggle('now', tilt.active && i === idx);
+      });
       const st = $('calib-status');
-      if (tilt.active) st.textContent = tilt.dirLearned ? `✓ הכיוון זוהה. סובב שמאלה וימינה כדי לוודא (${tilt.previewDeg.toFixed(0)}°)`
-        : tilt.dirTest ? `חיישן פעיל ✓  מחכה שתטה ימינה… (${tilt.previewDeg.toFixed(0)}°)` : `חיישן פעיל ✓  (${tilt.previewDeg.toFixed(0)}°)`;
-      else if (performance.now() - openedAt > 1500) st.textContent = 'לא מזוהים חיישני תנועה. אפשר להמשיך עם מקלדת או מגע (נגיעה בצד שמאל / ימין).';
-      else st.textContent = 'בודק חיישנים…';
-      st.classList.toggle('bad', !tilt.active && performance.now() - openedAt > 1500);
+      const noSensor = !tilt.active && performance.now() - openedAt > 1500;
+      let text = 'בודק חיישנים…';
+      if (tilt.active) {
+        const d = `${tilt.previewDeg.toFixed(0)}°`;
+        text = {
+          neutral: `החזק ישר ויציב… (${d})`,
+          right: `עכשיו הטה ימינה והחזק (${d})`,
+          left: `✓ ימינה נקלט. עכשיו הטה שמאלה והחזק (${d})`,
+          center: `✓ שמאלה נקלט. חזור למרכז והחזק (${d})`,
+          done: '✓ הכיול הושלם. אפשר להתחיל',
+        }[tilt.step];
+      } else if (noSensor) text = 'לא מזוהים חיישני תנועה. אפשר להמשיך עם מקלדת או מגע (נגיעה בצד שמאל / ימין).';
+      if (st.textContent !== text) st.textContent = text;
+      st.classList.toggle('bad', noSensor);
+      st.classList.toggle('ok', tilt.step === 'done' && tilt.active);
+      const startBtn = $('btn-start');
+      const canStart = tilt.ready;           // finished, or no sensor at all
+      if (startBtn.disabled === canStart) startBtn.disabled = !canStart;
     },
   };
   return api;

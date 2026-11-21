@@ -21,3 +21,20 @@ Mobile-browser 3D racing game prototype (Three.js + Vite). Tilt-to-steer, auto-f
 - `npm test` – Vitest unit tests
 - `npm run build` / `npm run preview`
 - Smoke test: Playwright against preview with `?autopilot=1&fast=1&skipCalib=1&seed=1` (see TECH_SPEC §15.3). Chromium is preinstalled; do not run `playwright install`.
+
+
+## DIRECTION CONTRACT (non-negotiable; this has regressed before)
+The user reported "left/right is reversed" repeatedly. Root cause found with a real-browser test: the direction used to be learned from
+ANY early movement (picking the phone up, or the OS rotating the screen to landscape when Play is tapped), so it was set by accident.
+It now comes from a guided calibration that only reacts to HELD poses, plus jump compensation when the screen rotates.
+
+The rules, which every change must keep:
+1. Phone turned CLOCKWISE (right edge down) => steer RIGHT; counter-clockwise => LEFT. +steer = +d = right side of the road = right half of the screen.
+2. The nose of the car points forward (-z); the road bends right when curvature > 0; keyboard/touch right = +steer.
+3. Direction is measured on the device on every calibration (never restored from storage). `Start` stays disabled until the protocol finished.
+4. During a race a visible "↔" button flips the direction instantly.
+
+Before saying anything about direction is "fixed" or pushing a change that touches `src/input`, `src/render`, `src/sim/Car.js`, `src/sim/TrackModel.js`
+or `src/ui/screens.js`, run:  `npm run build && npm run preview &` then `npm run test:direction`
+(unit contract tests + `tests/real-sensor.mjs`, which drives the real Chromium sensor pipeline with a physical phone model, in 6 scenarios).
+Never write test expectations by copying the game's own formulas: use `tests/helpers/phone.js` (independent physical model).

@@ -1,12 +1,10 @@
-// Pure tilt math (unit-tested). The phone is a steering wheel: we measure how far the
-// device is rotated around the axis perpendicular to its screen, using gravity.
+// Pure tilt math (unit-tested). The phone is a steering wheel: we measure how far the device is rotated
+// around the axis perpendicular to its screen. That rotation is the same physical motion in portrait and in
+// both landscape orientations, so the angle is measured in the DEVICE frame and the screen orientation is not used.
 //
-// Frames
-//  - device frame: x = right, y = up on the NATURAL portrait screen (what devicemotion reports)
-//  - screen frame: x = right, y = up on the screen AS THE USER SEES IT (portrait or landscape)
-//  - `u` = accelerationIncludingGravity. On Android/Chrome it points "up" (reaction to gravity),
-//    on iOS the sign is inverted. After the sign fix `u` is the world-up vector in device frame.
-//  - angle = screen.orientation.angle = counter-clockwise rotation of the device from natural portrait.
+// u = accelerationIncludingGravity {x, y}: x = right edge, y = top edge of the NATURAL portrait screen.
+// Android/Chrome reports the reaction to gravity (+up); iOS reports the opposite sign. Negating both axes only shifts the
+// angle by 180 degrees and never changes the direction of rotation, so it is harmless, and it is undone anyway.
 export const DEG = Math.PI / 180;
 
 export function wrapPi(a) {
@@ -15,22 +13,16 @@ export function wrapPi(a) {
   return a;
 }
 
-/** World-up vector expressed in the screen frame. */
-export function gravityToScreen(u, angleDeg) {
-  const t = angleDeg * DEG, c = Math.cos(t), s = Math.sin(t);
-  return { x: u.x * c - u.y * s, y: u.x * s + u.y * c };
+/** Wheel angle (radians). A phone turned CLOCKWISE (right edge down) gives an INCREASING value. */
+export function rollAngle(u) {
+  return Math.atan2(-u.x, u.y);
 }
 
-/** Wheel rotation (radians). Positive = rotated CLOCKWISE as seen by the user (right side down). */
-export function rollAngle(g) {
-  return Math.atan2(-g.x, g.y);
-}
-
-/** a = {x, y} accelerationIncludingGravity. planar = how much gravity lies in the screen plane (≈9.8 when upright, ≈0 when flat). */
-export function rollFromMotion(a, angleDeg, isIOS) {
+/** a = {x, y}. planar = how much gravity lies in the screen plane (~9.8 when upright, ~0 when lying flat). */
+export function rollFromMotion(a, isIOS = false) {
   const k = isIOS ? -1 : 1;
-  const g = gravityToScreen({ x: a.x * k, y: a.y * k }, angleDeg);
-  return { roll: rollAngle(g), planar: Math.hypot(g.x, g.y) };
+  const u = { x: a.x * k, y: a.y * k };
+  return { roll: rollAngle(u), planar: Math.hypot(u.x, u.y) };
 }
 
 export function smoothAngle(prev, next, alpha) {

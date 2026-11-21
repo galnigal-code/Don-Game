@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "smoke": "node tests/smoke.mjs",
-    "smoke:tilt": "node tests/smoke-tilt.mjs"
+    "smoke:tilt": "node tests/smoke-tilt.mjs",
+    "test:direction": "vitest run tests/unit/directions.test.js tests/unit/tilt.test.js && node tests/real-sensor.mjs"
   },
   "dependencies": {
     "three": "0.186.1"
