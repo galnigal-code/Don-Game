@@ -251,25 +251,20 @@ if h > 0 || vy > 0:  vy -= GRAVITY*dt; h += vy*dt; if h<=0 && onSurface(): h=0; 
 **מקור ראשי:** `devicemotion` → `accelerationIncludingGravity`, כלומר וקטור הכבידה. הוא יציב יותר מ-`deviceorientation` בהחזקה לרוחב, ועובד גם כשהטלפון זקוף וגם כשהוא כמעט שטוח.
 
 ```js
-// tiltMath.js – פונקציות טהורות
-// a = {x, y} מהחיישן (צירי המכשיר במצב portrait), angle = screen.orientation.angle (0/90/180/270)
-export function gravityToScreen(a, angle) {
-  const r = angle * Math.PI / 180;
-  return { x: a.x * Math.cos(r) + a.y * Math.sin(r),
-           y: -a.x * Math.sin(r) + a.y * Math.cos(r) };
+// src/input/tiltMath.js (המימוש בפועל; נבדק ב-tests/unit/tilt.test.js בכל 4 כיווני המסך)
+// u = accelerationIncludingGravity (באנדרואיד/Chrome מצביע "למעלה"; ב-iOS הסימן הפוך ולכן כופלים ב-1-)
+// angle = screen.orientation.angle = סיבוב המכשיר נגד כיוון השעון מהמצב הטבעי (0/90/180/270)
+export function gravityToScreen(u, angle) {          // וקטור "למעלה" במערכת הצירים של המסך כפי שהמשתמש רואה
+  const t = angle * DEG, c = Math.cos(t), s = Math.sin(t);
+  return { x: u.x * c - u.y * s, y: u.x * s + u.y * c };
 }
-export function rollAngle(g) { return Math.atan2(g.x, g.y); }   // סיבוב "הגה" במישור המסך, רדיאנים
-export function steerFromRoll(roll, zero, { deadZone, maxAngle, invert }) {
-  let a = wrapPi(roll - zero) * (invert ? -1 : 1);
-  const s = Math.sign(a), m = Math.abs(a);
-  if (m < deadZone) return 0;
-  return s * Math.min(1, (m - deadZone) / (maxAngle - deadZone));
-}
+export function rollAngle(g) { return Math.atan2(-g.x, g.y); }   // חיובי = סיבוב עם כיוון השעון = פנייה ימינה
+export function steerFromRoll(roll, zero, { deadZone, maxAngle, invert }) { /* אזור מת + רוויה, יחסית ל-zero */ }
 ```
 
 - **סימנים לאימות במכשיר:** הנוסחה מניחה מוסכמה של צירים. בפועל, אנדרואיד ו-iOS הופכים את סימני התאוצה זה ביחס לזה. **בשלב M2 חובה לבדוק בטלפון אמיתי** עם `?debug=1`, שמציג את `a.x`, `a.y`, `angle`, `roll` ו-`steer`. אם הכיוון הפוך, מתקנים את `invert` בקונפיג לפי פלטפורמה. הכלל: סיבוב הטלפון עם כיוון השעון (צד ימין למטה) = פנייה ימינה = `steer > 0`.
-- **החלקה:** low-pass על `roll` עם `alpha = 0.25` לכל אירוע. אחר כך `steer` מוחלק שוב בסימולציה: `steer += (raw - steer) * min(1, dt*STEER_SMOOTH)`.
-- **כיול:** `zero = roll` ברגע הלחיצה על "התחל". נשמר ב-`localStorage` (`dongame.calib = {zero, sensitivity}`) בתוך try/catch.
+- **החלקה:** low-pass מבוסס זמן על `roll`: `alpha = 1 - exp(-dt/SMOOTH_TAU)` עם `SMOOTH_TAU = 0.06` שניות, כך שההרגשה לא תלויה בקצב האירועים של החיישן. אחר כך `steer` מוחלק שוב בסימולציה: `steer += (raw - steer) * min(1, dt*STEER_SMOOTH)`.
+- **כיול:** `zero` הוא התנוחה האחרונה שהוחזקה יציבה (שינוי של פחות מ-1.5° במשך 0.6 שניות) ברגע הלחיצה על "התחל". הכיול נעשה בכל כניסה מהתפריט, כי התנוחה משתנה בין פעמים. ב-`localStorage` (`dongame.calib`) נשמרים רק הרגישות וכיוון ההיגוי. במסך הכיול יש כפתור "הפוך כיוון" (או `?invert=1`) למקרה שחיישן במכשיר מסוים הפוך.
 - **רגישות:** נמוכה / רגילה / גבוהה ממפים ל-`maxAngle` של 38° / 30° / 22°.
 - **הרשאות:** אם `DeviceMotionEvent.requestPermission` קיים (iOS), קוראים לו בלחיצה על "שחק". באנדרואיד זה לא נדרש. אם לא מתקבלים אירועים תוך שנייה, מוצגת הודעה: "לא מזוהים חיישני תנועה. פתח את המשחק בטלפון ובכתובת https".
 

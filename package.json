@@ -8,7 +8,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "smoke": "node tests/smoke.mjs"
+    "smoke": "node tests/smoke.mjs",
+    "smoke:tilt": "node tests/smoke-tilt.mjs"
   },
   "dependencies": {
     "three": "0.186.1"

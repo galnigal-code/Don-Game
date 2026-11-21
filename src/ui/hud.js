@@ -1,6 +1,6 @@
 // HUD: timer, speed, progress, turbo + item buttons, respawn fade, result card.
 // Turbo is physically on the LEFT, item on the RIGHT (also in RTL layout).
-export function createHud(root, { onRestart }) {
+export function createHud(root, { onRestart, onRecalibrate }) {
   root.innerHTML = `
     <div id="hud-top">
       <div id="hud-speed"><b>0</b> קמ"ש</div>
@@ -16,6 +16,7 @@ export function createHud(root, { onRestart }) {
         <div id="result-title">סיימת!</div>
         <div id="result-time"></div>
         <button id="btn-again">מרוץ חדש</button>
+        <button id="btn-recalib" class="ghost">כיול מחדש</button>
       </div>
     </div>`;
   const $ = (id) => root.querySelector('#' + id);
@@ -28,7 +29,7 @@ export function createHud(root, { onRestart }) {
   turbo.addEventListener('pointercancel', release);
   turbo.addEventListener('pointerleave', release);
   $('btn-again').addEventListener('click', () => onRestart());
-  $('btn-again').style.pointerEvents = 'auto';
+  $('btn-recalib').addEventListener('click', () => onRecalibrate());
 
   hud.consumePulse = () => { const p = hud.turboPulse; hud.turboPulse = false; return p; };
 

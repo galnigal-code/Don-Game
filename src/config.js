@@ -19,7 +19,7 @@ export const CONFIG = {
     OWN_DROP_IMMUNITY: 1.5,
   },
   bots: { RUBBER_RANGE: 250, RUBBER_MAX: 0.12, DODGE_SUCCESS: 0.7 },
-  tilt: { DEAD_ZONE_DEG: 3, MAX_ANGLE_DEG: { low: 38, normal: 30, high: 22 }, LOWPASS: 0.25, INVERT: false },
+  tilt: { PLANAR_MIN: 3, DEAD_ZONE_DEG: 3, MAX_ANGLE_DEG: { low: 38, normal: 30, high: 22 }, SMOOTH_TAU: 0.06, INVERT: false },
   render: { MAX_PIXEL_RATIO: 1.5, FOG_NEAR: 120, FOG_FAR: 650, SHADOW_SIZE: 1024 },
   countdown: { SECONDS: 3, START_BOOST_WINDOW: 0.25, START_BOOST_TIME: 0.8 },
 };

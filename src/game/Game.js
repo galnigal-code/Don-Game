@@ -9,6 +9,8 @@ import { createCarModel } from '../render/CarModel.js';
 import { CameraRig } from '../render/CameraRig.js';
 import { KeyboardInput } from '../input/KeyboardInput.js';
 import { TouchSteerTemp } from '../input/TouchSteerTemp.js';
+import { TiltInput } from '../input/TiltInput.js';
+import { createScreens } from '../ui/screens.js';
 import { createHud } from '../ui/hud.js';
 import { createDebugOverlay } from '../debug/DebugOverlay.js';
 
@@ -29,10 +31,15 @@ export class Game {
     this.rig = new CameraRig(this.camera);
 
     this.keyboard = new KeyboardInput();
-    this.keyboard.onRestart = () => this.newRace();
+    this.keyboard.onRestart = () => { if (this.state === 'racing') this.beginRace(); };
     this.touch = new TouchSteerTemp(canvas);
-    this.hud = createHud(uiRoot, { onRestart: () => this.newRace() });
-    this.debug = params.has('debug') ? createDebugOverlay(uiRoot, this.renderer) : null;
+    this.tilt = new TiltInput();
+    if (params.has('invert')) this.tilt.invert = params.get('invert') !== '0';
+    this.uiRoot = uiRoot;
+    this.hud = createHud(uiRoot, { onRestart: () => this.beginRace(), onRecalibrate: () => this.toCalibrate() });
+    this.screens = createScreens(uiRoot, this.tilt, { onPlay: () => this.onPlay(), onStart: () => this.onStartRace() });
+    this.debug = params.has('debug') ? createDebugOverlay(uiRoot, this.renderer, this.tilt) : null;
+    this.state = 'menu'; // menu | calibrate | racing
 
     this.tmpPos = new THREE.Vector3();
     this.tmpWorld = {}; this.tmpSample = {};
@@ -40,7 +47,10 @@ export class Game {
     this.newRace();
 
     this.acc = 0; this.last = performance.now(); this.paused = false;
-    document.addEventListener('visibilitychange', () => { this.paused = document.hidden; this.last = performance.now(); });
+    document.addEventListener('visibilitychange', () => {
+      this.paused = document.hidden; this.last = performance.now();
+      if (!document.hidden && this.state === 'racing') this.keepAwake();
+    });
     this.frame = this.frame.bind(this);
   }
 
@@ -56,18 +66,58 @@ export class Game {
     this.updateViews(0);
   }
 
-  start() { requestAnimationFrame(this.frame); }
+  start() {
+    if (this.autopilot || this.params.has('skipCalib')) { this.tilt.start(); this.beginRace(); }
+    else this.toMenu();
+    requestAnimationFrame(this.frame);
+  }
+
+  setHudVisible(v) { this.uiRoot.classList.toggle('hud-hidden', !v); }
+
+  toMenu() { this.state = 'menu'; this.setHudVisible(false); this.screens.showMenu(); }
+
+  toCalibrate() { this.state = 'calibrate'; this.setHudVisible(false); this.hud.hideResult(); this.screens.showCalibrate(); }
+
+  /** "Play" tap: must run inside the tap handler (iOS motion permission, fullscreen, orientation lock). */
+  async onPlay() {
+    const perm = this.tilt.requestPermission();
+    const immersive = (async () => {
+      try { await document.documentElement.requestFullscreen?.({ navigationUI: 'hide' }); } catch { /* not allowed */ }
+      try { await screen.orientation?.lock?.('landscape'); } catch { /* not supported */ }
+    })();
+    await Promise.all([perm, immersive]);
+    this.tilt.start();
+    this.toCalibrate();
+  }
+
+  onStartRace() {
+    this.tilt.calibrate();
+    this.beginRace();
+  }
+
+  beginRace() {
+    this.newRace();
+    this.state = 'racing';
+    this.screens.hide();
+    this.setHudVisible(true);
+    this.keepAwake();
+  }
+
+  async keepAwake() {
+    try { this.wake = await navigator.wakeLock?.request('screen'); } catch { /* not available */ }
+  }
 
   frame(now) {
     requestAnimationFrame(this.frame);
     const dt = Math.min((now - this.last) / 1000, 0.25);
     this.last = now;
-    if (!this.paused) {
+    if (!this.paused && this.state === 'racing') {
       this.acc += dt * this.fast;
       let n = 0;
       while (this.acc >= STEP && n++ < 5 * this.fast) { this.simStep(); this.acc -= STEP; }
       if (this.acc > STEP) this.acc = 0;
     }
+    this.screens.update();
     this.render(dt);
     this.debug?.frame(dt, this);
   }
@@ -76,7 +126,9 @@ export class Game {
     const w = this.world, car = w.player;
     if (this.autopilot) driveSimple(car, this.track);
     else {
-      car.input.steer = clamp(this.keyboard.update(STEP) + this.touch.steer, -1, 1);
+      const kb = this.keyboard.update(STEP);
+      // tilt wins when the phone reports motion; touch-halves steering is only a fallback
+      car.input.steer = clamp(this.tilt.active ? this.tilt.steer + kb : kb + this.touch.steer, -1, 1);
       car.input.turbo = this.keyboard.turbo || this.hud.turboHeld || this.hud.consumePulse();
     }
     w.step(STEP);
