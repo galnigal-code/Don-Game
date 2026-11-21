@@ -38,3 +38,8 @@ Before saying anything about direction is "fixed" or pushing a change that touch
 or `src/ui/screens.js`, run:  `npm run build && npm run preview &` then `npm run test:direction`
 (unit contract tests + `tests/real-sensor.mjs`, which drives the real Chromium sensor pipeline with a physical phone model, in 6 scenarios).
 Never write test expectations by copying the game's own formulas: use `tests/helpers/phone.js` (independent physical model).
+
+## VERSION VISIBILITY
+Every build shows its id at the bottom-right of the screen ("גרסה <sha> · <date> UTC") and writes `version.json`; the running game polls it
+and refreshes itself on the menu (or shows an update button elsewhere). When the user says something is "still broken", first check that
+their screen shows the build you just pushed (GitHub Pages caches the page for ~10 minutes). Tell them the expected sha after every push.

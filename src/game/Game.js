@@ -19,6 +19,7 @@ import { createScreens } from '../ui/screens.js';
 import { createHud } from '../ui/hud.js';
 import { createDebugOverlay } from '../debug/DebugOverlay.js';
 import { Sound } from '../audio/Sound.js';
+import { BUILD_ID, BUILD_LABEL, isOutdated, fetchPublished } from '../version.js';
 
 const STEP = CONFIG.sim.STEP;
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -80,6 +81,7 @@ export class Game {
     this.screens = createScreens(uiRoot, this.tilt, { onPlay: () => this.onPlay(), onStart: () => this.onStartRace() });
     this.debug = params.has('debug') ? createDebugOverlay(uiRoot, this.renderer, this.tilt) : null;
     this.state = 'menu';
+    this.setupVersionBadge(uiRoot);
 
     this.carWorld = []; this.tmpSample = {}; this.tmpWorld = {}; this.tmpPos = new THREE.Vector3();
     this.views = [];
@@ -93,6 +95,35 @@ export class Game {
       if (!document.hidden && this.state !== 'menu' && this.state !== 'calibrate') this.keepAwake();
     });
     this.frame = this.frame.bind(this);
+  }
+
+  /* ---------- version ---------- */
+
+  /** Shows which build is running and reloads (or offers to) when a newer one has been published. */
+  setupVersionBadge(uiRoot) {
+    const badge = document.createElement('div');
+    badge.id = 'build'; badge.textContent = 'גרסה ' + BUILD_LABEL;
+    const update = document.createElement('button');
+    update.id = 'btn-update'; update.hidden = true; update.textContent = 'יצאה גרסה חדשה, לחץ לעדכון';
+    const reload = (id) => { location.replace(`${location.pathname}?v=${encodeURIComponent(id)}`); };
+    update.addEventListener('click', () => reload(this.publishedId || Date.now()));
+    uiRoot.appendChild(badge); uiRoot.appendChild(update);
+    const check = async () => {
+      const pub = await fetchPublished();
+      if (!pub || !isOutdated(BUILD_ID, pub.id)) { update.hidden = true; return; }
+      this.publishedId = pub.id;
+      let tried = null;
+      try { tried = sessionStorage.getItem('dongame.autoReload'); } catch { /* ignore */ }
+      // idle on the menu: refresh silently, once per published version. Otherwise (or if it did not help) show the button.
+      if ((this.state === 'menu') && tried !== pub.id) {
+        try { sessionStorage.setItem('dongame.autoReload', pub.id); } catch { /* ignore */ }
+        reload(pub.id);
+      } else update.hidden = false;
+    };
+    this.checkVersion = check;
+    check();
+    setInterval(check, 60000);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) check(); });
   }
 
   /* ---------- flow ---------- */

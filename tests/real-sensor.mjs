@@ -55,18 +55,20 @@ async function scenario(browser, name, { lockAngle, restAngle, mirrorX = false, 
 
   // 2. taps Play: the OS rotates the UI to landscape RIGHT AWAY (the phone has not moved yet)
   await page.click('#btn-play');
-  await cdp.send('Emulation.setDeviceMetricsOverride', { width: 844, height: 390, deviceScaleFactor: 1, mobile: true,
-    screenOrientation: { type: lockAngle === 90 ? 'landscapePrimary' : 'landscapeSecondary', angle: lockAngle } });
+  // (lockAngle == null: the screen stays in portrait, e.g. the page runs in an in-app browser that cannot lock the orientation)
+  if (lockAngle != null) {
+    await cdp.send('Emulation.setDeviceMetricsOverride', { width: 844, height: 390, deviceScaleFactor: 1, mobile: true,
+      screenOrientation: { type: lockAngle === 90 ? 'landscapePrimary' : 'landscapeSecondary', angle: lockAngle } });
+  }
   await hold(900);
   // 3. ...then the player physically turns the phone into landscape (CCW 90 for angle 90, CW 90 = rest 270 for angle 270)
-  await sweep(0, 0, 0, 10);
   const nat = (a) => (a === 90 ? 90 : 270);
-  for (let i = 1; i <= 10; i++) { await setPose(nat(lockAngle) * i / 10, 0); await hold(60); }
-  await setPose(restAngle ?? nat(lockAngle), 0);
+  const rest = restAngle ?? (lockAngle != null ? nat(lockAngle) : 0);
+  for (let i = 1; i <= 10; i++) { await setPose(rest * i / 10, 0); await hold(60); }
+  await setPose(rest, 0);
   await hold(1300);
 
   // 4. the calibration protocol, exactly as instructed on screen: hold straight, tilt right, tilt left, back to the middle
-  const rest = restAngle ?? nat(lockAngle);
   await sweep(rest, 0, 22, 500); await setPose(rest, 22); await hold(1300);      // right = clockwise
   await sweep(rest, 22, -22, 700); await setPose(rest, -22); await hold(1300);    // left = counter-clockwise
   await sweep(rest, -22, 0, 500); await setPose(rest, 0); await hold(1500);
@@ -102,6 +104,9 @@ const scenarios = [
   ['landscape-right (angle 270)', { lockAngle: 270 }],
   ['angle 270 + accidental moves before play', { lockAngle: 270, accidentalMoves: true }],
   ['angle 90 + accidental moves before play', { lockAngle: 90, accidentalMoves: true }],
+  ['portrait only (orientation lock fails)', { lockAngle: null }],
+  ['portrait page, phone physically landscape (angle 90 hold)', { lockAngle: null, restAngle: 90 }],
+  ['portrait page, phone physically landscape (angle 270 hold)', { lockAngle: null, restAngle: 270 }],
   ['mirrored-x phone, angle 270', { lockAngle: 270, mirrorX: true }],
   ['iOS-style negated axes, angle 90', { lockAngle: 90, flipSign: true }],
 ];

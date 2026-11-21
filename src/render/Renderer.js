@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { CONFIG } from '../config.js';
+import { baseFov } from './cameraMath.js';
 
 const HORIZON = 0xf0c590;
 
@@ -40,6 +41,8 @@ export function createRenderer(canvas) {
     const w = window.innerWidth, h = window.innerHeight;
     renderer.setSize(w, h, false);
     camera.aspect = w / h;
+    camera.userData.baseFov = baseFov(camera.aspect);
+    camera.fov = camera.userData.baseFov;
     camera.updateProjectionMatrix();
   }
   window.addEventListener('resize', resize);

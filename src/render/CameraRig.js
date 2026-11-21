@@ -29,7 +29,7 @@ export class CameraRig {
       this.shakeAmp *= Math.exp(-8 * dt);
     }
     this.camera.lookAt(this.look);
-    const fov = 65 + 13 * this.turbo;
+    const fov = (this.camera.userData.baseFov ?? 65) + 13 * this.turbo;
     if (Math.abs(this.camera.fov - fov) > 0.05) { this.camera.fov = fov; this.camera.updateProjectionMatrix(); }
   }
 }

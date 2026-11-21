@@ -10,6 +10,7 @@
     "test": "vitest run",
     "smoke": "node tests/smoke.mjs",
     "smoke:tilt": "node tests/smoke-tilt.mjs",
+    "smoke:version": "node tests/smoke-version.mjs",
     "test:direction": "vitest run tests/unit/directions.test.js tests/unit/tilt.test.js && node tests/real-sensor.mjs"
   },
   "dependencies": {
