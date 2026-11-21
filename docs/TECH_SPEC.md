@@ -1,0 +1,552 @@
+# איפיון טכני – Don Game (אב טיפוס)
+
+גרסה: 1.0 · תאריך: 21.11.2026 · מבוסס על [SPEC.md](./SPEC.md) (איפיון מוצר מאושר, גרסה 0.2)
+
+המסמך הזה הוא הוראות הבנייה. הוא מגדיר ארכיטקטורה, מבנה קבצים, מודל נתונים, אלגוריתמים, קבועים ושלבי עבודה. כשיש סתירה, **SPEC.md קובע מה המשחק עושה**, והמסמך הזה קובע **איך** בונים אותו. כל המספרים בסעיף "קבועים" הם ערכי התחלה לכוונון, לא חוקים.
+
+---
+
+## 1. עקרונות מנחים
+
+1. **פשוט לפני יפה.** קודם משחק שעובד מקצה לקצה עם קוביות, אחר כך גרפיקה.
+2. **פיזיקה במרחב המסלול.** כל מכונית ופריט ממוקמים בקואורדינטות `(s, d)`: מרחק לאורך המסלול והיסט לרוחב. אין מנוע פיזיקה. זה עושה את הבוטים, הדירוג, ההתנגשויות והחזרה למסלול פשוטים מאוד.
+3. **סימולציה מופרדת מרינדור.** לוגיקת המשחק היא JavaScript טהור בלי Three.js, ולכן אפשר לבדוק אותה ב-Vitest. שכבת הרינדור רק קוראת את המצב ומציירת.
+4. **אפס נכסים חיצוניים.** כל המודלים נבנים בקוד מגאומטריות של Three.js, והסאונד מסונתז ב-Web Audio. אין קבצי מודל, טקסטורה או אודיו, ולכן אין בעיות רישוי ואין טעינה.
+5. **Mobile first.** כל החלטה נבדקת מול טלפון אנדרואיד בינוני.
+
+## 2. סטאק
+
+| רכיב | בחירה | הערות |
+|---|---|---|
+| שפה | JavaScript (ES2022, ES modules) | עם JSDoc לטיפוסים במקומות חשובים. בלי TypeScript, כדי לשמור על פשטות |
+| גרפיקה | `three` **0.186.1** (גרסה מדויקת) | מ-npm, לא מ-CDN |
+| בנייה | Vite (גרסת stable אחרונה, נעולה ב-`package-lock.json`) | `base: '/Don-Game/'` עבור GitHub Pages |
+| בדיקות יחידה | Vitest | ללוגיקה בלבד (`src/sim`, `src/input/tiltMath.js`) |
+| בדיקת עשן | Playwright (מותקן בסביבה) | טעינה, אפס שגיאות קונסול, מרוץ אוטומטי עד הסוף |
+| UI | HTML + CSS מעל ה-canvas | בלי framework |
+| אודיו | Web Audio API | סינתזה, בלי קבצים |
+| הפצה | GitHub Pages דרך GitHub Actions | HTTPS, חובה לחיישנים |
+
+## 3. מבנה הריפו
+
+```
+Don-Game/
+├─ CLAUDE.md                 # הוראות עבודה לסוכן שבונה
+├─ README.md                 # איך מריצים, קישור למשחק
+├─ index.html                # canvas + שכבות UI
+├─ vite.config.js
+├─ package.json
+├─ .github/workflows/deploy.yml
+├─ docs/
+│  ├─ SPEC.md                # איפיון מוצר (מאושר)
+│  └─ TECH_SPEC.md           # המסמך הזה
+├─ src/
+│  ├─ main.js                # bootstrap: יוצר Game ומחבר הכל
+│  ├─ config.js              # כל הקבועים (סעיף 13)
+│  ├─ game/
+│  │  ├─ Game.js             # לולאה ראשית + מכונת מצבים
+│  │  └─ states.js           # MENU, CALIBRATE, COUNTDOWN, RACING, SPECTATE, RESULTS
+│  ├─ sim/                   # לוגיקה טהורה – בלי three, בלי DOM
+│  │  ├─ World.js            # מצב העולם, step(dt)
+│  │  ├─ Car.js              # מצב מכונית + פיזיקת ארקייד
+│  │  ├─ TrackModel.js       # דגימת המסלול: s → נקודה, כיוון, רוחב, עקמומיות, סוג קטע
+│  │  ├─ trackData.js        # נקודות בקרה + קטעים מיוחדים של מסלול המדבר
+│  │  ├─ items.js            # הגדרות פריטים, הגרלה, אפקטים
+│  │  ├─ entities.js         # מוקשים, שמן, חביות, טילים, כדורים, קופסאות
+│  │  ├─ collisions.js
+│  │  ├─ BotDriver.js        # AI
+│  │  ├─ race.js             # דירוג, סיום, זמנים
+│  │  └─ rng.js              # PRNG עם seed (mulberry32)
+│  ├─ input/
+│  │  ├─ TiltInput.js        # חיישנים → ערך היגוי [-1..1]
+│  │  ├─ tiltMath.js         # מתמטיקה טהורה (נבדקת)
+│  │  ├─ KeyboardInput.js    # פיתוח בלבד
+│  │  └─ TouchButtons.js     # טורבו/פריט, multi-touch
+│  ├─ render/
+│  │  ├─ Renderer.js         # WebGLRenderer, סצנה, תאורה, resize
+│  │  ├─ TrackMesh.js        # בניית כביש, שוליים, גדרות, קו סיום
+│  │  ├─ Environment.js      # שטח, דיונות, צוקים, קקטוסים, שמיים
+│  │  ├─ CarModel.js         # בניית מכונית low-poly בצבע נתון
+│  │  ├─ EntityViews.js      # ייצוג גרפי לפריטים ולקופסאות
+│  │  ├─ Effects.js          # אבק, להבה, פיצוץ, מגן
+│  │  └─ CameraRig.js        # מצלמת מרדף + מצב צפייה
+│  ├─ ui/
+│  │  ├─ screens.js          # מסכי תפריט/כיול/תוצאות
+│  │  ├─ hud.js
+│  │  └─ ui.css
+│  ├─ audio/
+│  │  └─ Sound.js
+│  └─ debug/
+│     └─ DebugOverlay.js     # ?debug=1
+└─ tests/
+   ├─ unit/*.test.js
+   └─ smoke.spec.js          # Playwright
+```
+
+## 4. לולאת המשחק
+
+- `requestAnimationFrame` מריץ את הרינדור.
+- הסימולציה רצה ב-**צעד קבוע של 1/60 שנייה** עם accumulator. מקסימום 5 צעדים לפריים, כדי שלא תהיה "ספירלת מוות" אחרי שהטאב חוזר מרקע.
+- הרינדור מצייר את המצב האחרון, בלי אינטרפולציה בשלב הזה.
+- כשהטאב מוסתר (`visibilitychange`) המשחק עובר להשהיה, והשעון לא רץ.
+
+```js
+// Game.js – סקיצה
+const STEP = 1 / 60;
+let acc = 0, last = performance.now();
+function frame(now) {
+  acc += Math.min((now - last) / 1000, 0.25); last = now;
+  let n = 0;
+  while (acc >= STEP && n++ < 5) { state.update(STEP); acc -= STEP; }
+  state.render();
+  requestAnimationFrame(frame);
+}
+```
+
+### מכונת מצבים
+
+```
+MENU ──שחק──▶ (אין כיול שמור?) CALIBRATE ──▶ COUNTDOWN ──▶ RACING ──שחקן סיים──▶ SPECTATE ──כולם סיימו / דלג──▶ RESULTS
+  ▲                                                                                                                │
+  └──────────────────────────────────────────── עוד מרוץ (→ COUNTDOWN עם עולם חדש) ◀──────────────────────────────┘
+MENU ──כיול מחדש──▶ CALIBRATE ──▶ MENU
+```
+
+לכל מצב יש `enter()`, `update(dt)`, `render()` ו-`exit()`.
+
+- **COUNTDOWN:** הבוטים והשחקן קפואים במשך 3 שניות. לחיצת טורבו בחלון של ±0.25 שניות סביב GO מפעילה **זינוק מהיר**: מהירות התחלה מלאה ו-0.8 שניות של boost קל, בלי לצרוך טורבו. לחיצת טורבו לפני החלון מבוטלת ולא נספרת.
+- **"דלג" ב-SPECTATE:** מריץ את הסימולציה מהר, עד 30 צעדים לפריים, עד שכולם מסיימים. כך הדירוג הוא תוצאה אמיתית ולא ניחוש.
+
+## 5. המסלול
+
+### 5.1 הגדרה (`trackData.js`)
+
+- רשימת **נקודות בקרה** `[x, y, z]` במטרים, ~25–35 נקודות. המסלול לא סגור: `CatmullRomCurve3` עם `closed:false`, `curveType:'centripetal'`.
+- אורך יעד: **כ-2,900 מ'**. במהירות שיוט של 32 מ'/ש' ועם האטות, זה יוצא בערך 90 שניות. אחרי הבנייה מכוונים את האורך לפי `?autopilot=1` (סעיף 12).
+- הגובה (y) משתנה בעדינות: דיונות עד ±8 מ', ושיפועים של עד 8%.
+- **קטעים מיוחדים** מוגדרים לפי טווחי `s` (מטרים מההתחלה):
+
+```js
+export const SEGMENTS = [
+  { from: 0,    to: 120,  type: 'start' },        // ישר, רחב
+  { from: 640,  to: 760,  type: 'cliff', side: 'left' },   // בלי גדר משמאל – אפשר ליפול
+  { from: 1180, to: 1400, type: 'canyon' },       // צר (רוחב 12), קירות סלע משני הצדדים
+  { from: 1900, to: 2050, type: 'cliff', side: 'right' },
+  // ...
+];
+export const RAMPS = [ // רמפה: בתחילתה קפיצה. gap = ערוץ שצריך לעבור באוויר
+  { s: 420,  d: 0, width: 10, launchVy: 9,  gap: null },
+  { s: 1550, d: 0, width: 12, launchVy: 12, gap: { from: 1565, to: 1600 } },
+  // סה"כ 3–4
+];
+export const BOX_ROWS = [300, 820, 1300, 1750, 2200, 2600];   // 6 שורות
+export const FIXED_OBSTACLES = [ { s: 500, d: 4, kind: 'barrel' }, /* ... */ ];
+```
+
+### 5.2 דגימה (`TrackModel.js`)
+
+בטעינה דוגמים את העקומה כל **1 מ'** לטבלה. לכל דגימה `i` נשמרים:
+
+- `pos` – נקודה על קו המרכז
+- `tangent` – כיוון נורמלי
+- `right` – `normalize(cross(tangent, UP))`. המסלול לא מתהפך, אז `UP=(0,1,0)` מספיק
+- `halfWidth` – ברירת מחדל 9 מ' (כביש ברוחב 18), ובקניון 6
+- `curvature` – `κ = angleBetween(tangent[i], tangent[i+1])` עם סימן (חיובי = פנייה ימינה)
+- `edgeLeft` ו-`edgeRight` – אחד מ: `'wall'` (גדר/סלע), `'sand'` (שוליים עם חול עד `halfWidth+6`, ואחריהם גדר), או `'cliff'` (נפילה)
+
+ה-API:
+
+```js
+track.length                       // מטרים
+track.sample(s)                    // {pos, tangent, right, halfWidth, curvature, edgeLeft, edgeRight}, עם אינטרפולציה ליניארית בין דגימות
+track.toWorld(s, d, h)             // pos + right*d + UP*h  (Vector-like {x,y,z}, בלי three ב-sim)
+track.headingAt(s)                 // זווית ה-tangent במישור XZ
+```
+
+`sim/` לא מייבא את `three`. `TrackModel` מקבל מערך דגימות מוכן, ש-`render/` או סקריפט בנייה מייצר עם `CatmullRomCurve3`. אפשרות שנייה ופשוטה יותר: לממש Catmull-Rom קצר בתוך `sim/`, בערך 30 שורות. **ממליצים על האפשרות השנייה**, כדי ש-sim יישאר טהור.
+
+### 5.3 נקודות ביקורת
+
+כל **80 מ'** יש checkpoint. למכונית נשמר `lastCheckpointS = floor(s/80)*80` כשהיא על הכביש (`h==0` ו-`|d|<=halfWidth`). אם הנקודה נופלת על רמפה או על ערוץ, משתמשים בנקודה שלפניה.
+
+## 6. פיזיקת המכונית (`Car.js`)
+
+### 6.1 מצב
+
+```js
+{
+  id, name, color, isPlayer,
+  s, d,            // מיקום במרחב המסלול (מ')
+  h, vy,           // גובה מעל הכביש ומהירות אנכית (קפיצות/נפילה)
+  yaw,             // זווית יחסית לכיוון המסלול (רדיאנים). 0 = ישר קדימה
+  speed,           // מ'/ש'
+  steer,           // קלט [-1..1]
+  turbosLeft: 2, turboT: 0,
+  item: null,      // 'mine'|'missile'|'oil'|'gun'|'shield'|'barrel'|null
+  gunShotsLeft: 0, gunCooldown: 0,
+  shieldT: 0,
+  hit: { kind: null, t: 0 },   // 'spin'|'launch'|'slip'|'bump'
+  gunSlow: 0,                  // האטה מצטברת מרובה [0..0.5], דועכת
+  state: 'driving'|'falling'|'respawning'|'finished',
+  respawnT: 0, lastCheckpointS: 0, stuckT: 0,
+  finishTime: null, place: null,
+}
+```
+
+### 6.2 צעד (`dt = 1/60`)
+
+```
+// 1. מהירות יעד
+target = CRUISE_SPEED
+if turboT > 0:            target *= TURBO_MULT
+if offroad(sand):         target *= SAND_MULT
+if hit.kind:              target *= HIT_SPEED_MULT[hit.kind]
+target *= (1 - gunSlow)
+target *= rubberBand      // בוטים בלבד (סעיף 9.3)
+speed += clamp(target - speed, -DECEL*dt, ACCEL*dt)
+
+// 2. היגוי
+steerEff = steer
+if hit.kind == 'slip':    steerEff = steer*0.3 + sin(t*9)*0.6
+if hit.kind == 'spin':    steerEff = 0  (ו-yaw מסתובב ויזואלית בלבד)
+yawRate = steerEff * STEER_RATE * steerSpeedFactor(speed)   // היגוי חלש יותר במהירות נמוכה
+yaw += yawRate*dt
+yaw -= yaw * YAW_RETURN * dt                                // יישור עצמי עדין
+yaw = clamp(yaw, -MAX_YAW, MAX_YAW)
+
+// 3. תנועה במרחב המסלול
+κ = track.sample(s).curvature
+ds = speed*cos(yaw)*dt
+dd = speed*sin(yaw)*dt  -  κ * speed^2 * DRIFT_K * dt      // "כוח צנטריפוגלי": צריך להיגוי לתוך הפנייה
+s += ds; d += dd
+
+// 4. אנכי
+if h > 0 || vy > 0:  vy -= GRAVITY*dt; h += vy*dt; if h<=0 && onSurface(): h=0; vy=0 (נחיתה)
+```
+
+**מכונית באוויר:** אין שינוי בהיגוי, ו-`yaw` קפוא. גם `DRIFT_K` לא פועל.
+
+**`onSurface(s, d)`** בודק אם יש מתחת למכונית כביש, שוליים או רמפה. הוא מחזיר false כשהמכונית בערוץ של רמפה (`gap`), או מחוץ לקצה מסוג `cliff`.
+
+### 6.3 קצוות
+
+- `|d| > halfWidth` בצד `'wall'`: `d` מוצמד לקצה, `yaw *= -0.4` (החזר), `speed *= 0.85`, ורעידת מצלמה קטנה.
+- `halfWidth < |d| <= halfWidth+6` בצד `'sand'`: האטה לפי `SAND_MULT`. ב-`halfWidth+6` יש קיר.
+- `|d| > halfWidth` בצד `'cliff'`, או `h<=0` מעל `gap`: המכונית עוברת ל-`falling`. היא ממשיכה לנוע וליפול במשך 0.8 שניות, ואז עוברת ל-`respawning`.
+- **respawning:** המסך מוחשך (אצל השחקן), ולאחר `RESPAWN_TIME` המכונית חוזרת ל-`s=lastCheckpointS`, `d=0`, `yaw=0`, `speed=CRUISE*0.5`. אחר כך יש 1.5 שניות של חסינות מהבהבת (פריטים לא פוגעים בה).
+- **תקוע:** אם `speed < 3` יותר מ-3 שניות במצב `driving`, מבצעים respawn.
+
+### 6.4 רמפות
+
+כשמכונית עם `h==0` עוברת את `ramp.s` ו-`|d - ramp.d| < ramp.width/2`, מוגדר `vy = ramp.launchVy * (speed/CRUISE_SPEED)`. כך טורבו מקפיץ רחוק יותר. אם הרמפה מעל ערוץ, אורך הקפיצה במהירות שיוט חייב להספיק לעבור אותו. מוסיפים בדיקת יחידה שמאמתת את זה לכל רמפה.
+
+### 6.5 סיום
+
+כש-`s >= track.length`, המכונית עוברת ל-`finished`, נשמר `finishTime`, ו-`place` נקבע לפי סדר הסיום. מכונית שסיימה ממשיכה לנסוע במהירות שיוט עם `steer` אוטומטי למרכז. היא לא פוגעת ולא נפגעת, ונסיעתה מוגבלת לטווח `track.length + 150`, שהוא אזור ההאטה אחרי קו הסיום.
+
+## 7. קלט
+
+### 7.1 היגוי בהטיה (`TiltInput.js` + `tiltMath.js`)
+
+**מקור ראשי:** `devicemotion` → `accelerationIncludingGravity`, כלומר וקטור הכבידה. הוא יציב יותר מ-`deviceorientation` בהחזקה לרוחב, ועובד גם כשהטלפון זקוף וגם כשהוא כמעט שטוח.
+
+```js
+// tiltMath.js – פונקציות טהורות
+// a = {x, y} מהחיישן (צירי המכשיר במצב portrait), angle = screen.orientation.angle (0/90/180/270)
+export function gravityToScreen(a, angle) {
+  const r = angle * Math.PI / 180;
+  return { x: a.x * Math.cos(r) + a.y * Math.sin(r),
+           y: -a.x * Math.sin(r) + a.y * Math.cos(r) };
+}
+export function rollAngle(g) { return Math.atan2(g.x, g.y); }   // סיבוב "הגה" במישור המסך, רדיאנים
+export function steerFromRoll(roll, zero, { deadZone, maxAngle, invert }) {
+  let a = wrapPi(roll - zero) * (invert ? -1 : 1);
+  const s = Math.sign(a), m = Math.abs(a);
+  if (m < deadZone) return 0;
+  return s * Math.min(1, (m - deadZone) / (maxAngle - deadZone));
+}
+```
+
+- **סימנים לאימות במכשיר:** הנוסחה מניחה מוסכמה של צירים. בפועל, אנדרואיד ו-iOS הופכים את סימני התאוצה זה ביחס לזה. **בשלב M2 חובה לבדוק בטלפון אמיתי** עם `?debug=1`, שמציג את `a.x`, `a.y`, `angle`, `roll` ו-`steer`. אם הכיוון הפוך, מתקנים את `invert` בקונפיג לפי פלטפורמה. הכלל: סיבוב הטלפון עם כיוון השעון (צד ימין למטה) = פנייה ימינה = `steer > 0`.
+- **החלקה:** low-pass על `roll` עם `alpha = 0.25` לכל אירוע. אחר כך `steer` מוחלק שוב בסימולציה: `steer += (raw - steer) * min(1, dt*STEER_SMOOTH)`.
+- **כיול:** `zero = roll` ברגע הלחיצה על "התחל". נשמר ב-`localStorage` (`dongame.calib = {zero, sensitivity}`) בתוך try/catch.
+- **רגישות:** נמוכה / רגילה / גבוהה ממפים ל-`maxAngle` של 38° / 30° / 22°.
+- **הרשאות:** אם `DeviceMotionEvent.requestPermission` קיים (iOS), קוראים לו בלחיצה על "שחק". באנדרואיד זה לא נדרש. אם לא מתקבלים אירועים תוך שנייה, מוצגת הודעה: "לא מזוהים חיישני תנועה. פתח את המשחק בטלפון ובכתובת https".
+
+### 7.2 כפתורים (`TouchButtons.js`)
+
+- שני אלמנטים, טורבו משמאל ופריט מימין. הם מוגדרים ב-`position:fixed` ועם `env(safe-area-inset-*)`, בקוטר 22vmin לפחות.
+- **pointer events** (`pointerdown`), עם `touch-action:none` על כל המשחק. אסור להסתמך על `click`, כי הוא מתעכב ולא עובד ב-multi-touch.
+- הפעולה מתבצעת ב-`pointerdown` עם רטט קצר (`navigator.vibrate?.(20)`).
+- `preventDefault` ל-`contextmenu`, ו-`user-select:none` בכל ה-UI.
+
+### 7.3 מקלדת (`KeyboardInput.js`, פיתוח בלבד)
+
+נטען רק ב-`import.meta.env.DEV` או עם `?debug=1`. המקשים: ←/→ להיגוי (מגיע ל-±1 תוך 0.15 שניות), Shift לטורבו, ורווח לפריט.
+
+### 7.4 מסך מלא וכיוון מסך
+
+בלחיצה על "שחק": `document.documentElement.requestFullscreen?.()`, ואחר כך `screen.orientation.lock?.('landscape')` בתוך try/catch. בכיוון לאורך מוצגת שכבת "סובב את הטלפון", והמשחק מושהה.
+
+## 8. פריטים וקופסאות
+
+### 8.1 קופסאות
+
+- בכל ערך של `BOX_ROWS` יש 4 קופסאות, ב-`d = -6, -2, 2, 6`. בקטע צר מצמצמים ל-3.
+- **איסוף:** כשמכונית במרחק `|Δs| < 1.5` ו-`|Δd| < 1.6`, עם `h < 1.5`, והקופסה פעילה. אם `car.item == null`, המכונית מקבלת פריט מההגרלה. בכל מקרה הקופסה נעלמת ל-3 שניות.
+- אחרי האיסוף מוצגת **אנימציית "רולטה"** של 0.8 שניות על כפתור הפריט, ורק בסופה הפריט שמיש. אצל בוטים יש השהיה זהה.
+
+### 8.2 הגרלה לפי מיקום (`items.js`)
+
+משקלים לפי המיקום הנוכחי במרוץ, כש-1 הוא המוביל:
+
+| פריט | מקום 1 | מקום 2 | מקום 3 | מקום 4 |
+|---|---|---|---|---|
+| mine | 30 | 20 | 12 | 8 |
+| oil | 25 | 18 | 12 | 8 |
+| barrel | 20 | 15 | 10 | 6 |
+| shield | 15 | 15 | 14 | 12 |
+| gun | 10 | 20 | 24 | 26 |
+| missile | 0 | 12 | 28 | 40 |
+
+### 8.3 ישויות (`entities.js`)
+
+כל ישות מוגדרת במרחב המסלול: `{type, s, d, ownerId, t, alive}`.
+
+| ישות | יצירה | תנועה | פגיעה | אפקט |
+|---|---|---|---|---|
+| **mine** | `s = owner.s - 3`, `d = owner.d` | נייח, חי עד 25 שניות | רדיוס 1.4 | `hit='spin'` 1.5 שניות. המכונית מסתובבת 360° ויזואלית |
+| **oil** | `s - 3` | נייח, רדיוס 2.2, חי עד 20 שניות. אפשר לפגוע בו כמה פעמים | רדיוס 2.2 | `hit='slip'` 1.5 שניות |
+| **barrel** | `s - 3` | נייח, חי עד 30 שניות | רדיוס 1.3 | `hit='bump'` 1.0 שנייה ופיצוץ. החבית נעלמת |
+| **missile** | `s + 3`, יעד = המכונית הקרובה שלפני היורה (לפי `s`) | `speed = 70`. ב-`d` מתקרב ליעד ב-`12 m/s` לכל היותר. אם אין יעד, טס ישר 200 מ' ומתפוצץ | רדיוס 1.6 | `hit='launch'` 1.5 שניות: `vy=6`, ואחר כך כמעט עצירה |
+| **bullet** | 5 יריות, אחת כל 0.12 שניות, מ-`s+2` | `speed = 90`, `d` קבוע, טווח 120 מ' | רדיוס 1.0 | `gunSlow += 0.1` (עד 0.5), ודעיכה של `0.25/s` |
+| **shield** | על המכונית | `shieldT = 6` | – | חוסם את הפגיעה הבאה וממשיך עד הסוף. השמן לא משפיע. "פגיעה אחת או כל משך הזמן" = כל הפגיעות במשך 6 שניות |
+
+**כללים נוספים:**
+- היורה מוגן מהמוקש, השמן והחבית **של עצמו** במשך 1.5 שניות אחרי שהניח אותם.
+- מכונית במצב `hit`, `falling`, `respawning`, `finished` או עם חסינות לא נפגעת שוב. הפגיעה לא מצטברת.
+- טורבו לא מבטל פגיעה, אבל אחרי שהיא נגמרת הוא מחזיר מהר למהירות. `ACCEL` גבוה יותר בזמן טורבו.
+
+### 8.4 התנגשות בין מכוניות
+
+עיגולים במרחב `(s,d)` ברדיוס 1.1. כשיש חפיפה, מפרידים את שתי המכוניות לאורך הווקטור ביניהן. המכונית שמאחור מאבדת 10% מהמהירות, וזה לא נחשב "פגיעה". בודקים זוגות בלבד, ויש 4 מכוניות, אז O(n²) בסדר גמור.
+
+## 9. בוטים (`BotDriver.js`)
+
+הבוט מייצר `steer` ולחיצות על כפתורים, בדיוק כמו שחקן. אין לו "צ'יטים", חוץ מ-rubber band.
+
+### 9.1 נהיגה
+
+- **קו מרוץ:** מחושב פעם אחת: `racingD(s) = -clamp(κ_smoothed(s) * R, -0.6, 0.6) * halfWidth`. כך הבוט נצמד לפנים הפנייה. `κ_smoothed` הוא ממוצע נע על 30 מ' קדימה.
+- **יעד:** `targetD = racingD(s + lookahead) + personalOffset + noise(t)`. ה-`personalOffset` קבוע לכל בוט, בטווח ±2 מ'. ה-`noise` הוא סינוס איטי עם אמפליטודה של 1.2 מ'. `lookahead = 0.6 * speed` מטרים.
+- **בקר:** `desiredYaw = atan2(targetD - d, lookahead)` ו-`steer = clamp((desiredYaw - yaw) * 2.5, -1, 1)`, כולל פיצוי על `DRIFT_K`.
+- **התחמקות:** סורקים ישויות מזיקות ב-`s+5 … s+40`. אם יש ישות ב-`|Δd| < 2.5`, ה-`targetD` מוזז ל-3 מ' לצד הפנוי, ומצליח ב-70% מהמקרים. כך הבוטים "טועים" לפעמים.
+- **קופסאות:** אם `item == null` ויש שורת קופסאות ב-`s+10 … s+60`, ה-`targetD` מכוון לקופסה הקרובה.
+- **צוקים:** בקטעי `cliff`, ה-`targetD` מוגבל לפחות מ-`halfWidth - 2` בצד הצוק.
+
+### 9.2 שימוש בפריטים
+
+| פריט | תנאי |
+|---|---|
+| missile, gun | יש מכונית לפנים במרחק 10–80 מ', וב-gun גם `|Δd| < 2` |
+| mine, oil, barrel | יש מכונית מאחור במרחק 5–40 מ'. אחרת משתמשים אחרי 8 שניות |
+| shield | מיד כשמזוהה טיל שמתקרב אליו, או אחרי 10 שניות |
+
+**טורבו:** הבוט מפעיל אחד ב-`s ≈ 0.35·L` ואחד ב-`s ≈ 0.8·L`, בתוספת אקראיות של ±150 מ'. אם הבוט במקום אחרון והפער גדול מ-60 מ', הוא מפעיל מוקדם.
+
+### 9.3 Rubber band
+
+`gap = bot.s - player.s` (חיובי = הבוט מוביל):
+
+```
+mult = 1 + clamp(-gap / 250, -1, 1) * 0.12
+```
+
+כך הבוט מקבל עד ±12% מהירות. אחרי שהשחקן סיים, הערך הוא `mult = 1`. הערכים נמצאים ב-`config.js`.
+
+### 9.4 שמות וצבעים
+
+שמות לבוטים מוגרלים מרשימה קבועה: `['טורבו-טל', 'רוני רוקט', 'מאיה מהירה', 'דני דיונה', 'שירה שמן', 'אבי אבק', 'נועה נייטרו', 'יוסי יעלון']`. הצבעים הם צהוב `#f5c400`, כחול `#1e6fff` וירוק `#18b04a`. מקום ההתחלה מוגרל: 4 מקומות בגריד של 2×2, ב-`s = -6, -12` ו-`d = ±3`.
+
+## 10. דירוג ומרוץ (`race.js`)
+
+- **מיקום חי:** מכוניות שסיימו מדורגות לפי `finishTime`, והשאר לפי `s` בסדר יורד.
+- **סיום המרוץ:** כש-4 המכוניות במצב `finished`.
+- **בטיחות:** אם 60 שניות אחרי שהשחקן סיים עדיין יש מי שלא סיים, הבוט מועבר בדילוגי respawn קדימה. אמור לא לקרות.
+- **פלט:** `[{name, color, isPlayer, place, finishTime}]`.
+
+## 11. רינדור
+
+### 11.1 Renderer
+
+- `WebGLRenderer({ antialias: devicePixelRatio < 2, powerPreference:'high-performance' })`
+- `setPixelRatio(Math.min(devicePixelRatio, 1.5))`. אם ה-FPS הממוצע נמוך מ-45 במשך 3 שניות, יורדים ל-1.0 (adaptive).
+- `outputColorSpace = SRGBColorSpace`, `toneMapping = ACESFilmicToneMapping`, `exposure ≈ 1.1`.
+- **תאורה:** `HemisphereLight` (שמיים תכלת-כתום, קרקע חולית) + `DirectionalLight` של "שמש שוקעת" עם צללים, `shadow.mapSize` של 1024 ו-frustum צר של ±40 מ' שעוקב אחרי השחקן.
+- **ערפל:** `Fog(skyHorizonColor, 120, 650)`. ה-`camera.far` הוא 800.
+- **שמיים:** כדור גדול עם `ShaderMaterial` של גרדיאנט אנכי (תכלת למעלה, כתום-ורוד באופק) ושמש כדיסק.
+
+### 11.2 כביש (`TrackMesh.js`)
+
+- רצועה בנויה מהדגימות, כל 2 מ'. נקודות שמאל וימין הן `pos ± right*halfWidth`, וה-UV.v הוא `s/10`.
+- הטקסטורה נוצרת ב-`CanvasTexture`: אספלט חום-אפור עם פס אמצעי מקווקו בצבע לבן-צהוב ושוליים אדומים-לבנים (kerbs) בפניות.
+- **שוליים:** רצועה נוספת בצבע חול כהה.
+- **גדרות:** בקצה `wall` יש קורות עץ נמוכות או סלעים מסוג `InstancedMesh`. בקניון יש קירות סלע גבוהים, flat-shaded.
+- **צוק:** בקצה `cliff` יש מדרון קיר תלול כלפי מטה. השטח שם נמוך ב-40 מ', כך שרואים את הנפילה.
+- **רמפות:** קרש עם פסי אזהרה צהוב-שחור.
+- **קו התחלה וקו סיום:** משטח משובץ (CanvasTexture), שער עם באנר ודגלים.
+
+### 11.3 סביבה (`Environment.js`)
+
+- **שטח:** `PlaneGeometry` בגודל 3000×3000 עם 200×200 מקטעים, ועליו רעש (simplex או value noise פשוט) לדיונות. הגובה נדחס ל-`trackY - 0.3` ברדיוס של 25 מ' מהכביש, כדי שהשטח לא יחתוך את הכביש. השטח `flatShading` בצבעי חול.
+- **צוקים ומסות:** 30–50 `DodecahedronGeometry` או `IcosahedronGeometry` מעוותים, flat-shaded, בגווני אדום-כתום ובשכבות (strata).
+- **קקטוסים:** בנויים מגלילים ו-`InstancedMesh`, כ-150 יחידות. מפוזרים רק במרחק 15–200 מ' מהכביש.
+- **פיזור:** דטרמיניסטי מ-`rng(seed)`.
+- **תקציב:** עד ~150 draw calls ועד ~300K משולשים בסצנה.
+
+### 11.4 מכונית (`CarModel.js`)
+
+`Group` של כ-12–20 רשתות: גוף נמוך ומחודד (`ExtrudeGeometry` מפרופיל צד, או קופסאות עם `BufferGeometry` מותאם), חלונות כהים, 4 גלגלים (`CylinderGeometry`, מסתובבים), כנף אחורית, פנסים פולטים ו-2 אגזוזים. החומר הוא `MeshStandardMaterial` עם `metalness 0.3`, `roughness 0.4` ו-`color` לפי פרמטר. **בלי לוגו.**
+
+**מיפוי מצב לתצוגה:**
+- המיקום הוא `track.toWorld(s,d,h)`.
+- הכיוון הוא `headingAt(s) + yaw`.
+- גוף המכונית נוטה בעדינות לפי `steer` (roll) ולפי שיפוע הכביש (pitch).
+- ב-`spin` מתווסף סיבוב Y של 360° לאורך משך הפגיעה.
+- ב-`launch` מתווסף סיבוב X.
+
+### 11.5 אפקטים (`Effects.js`)
+
+- **חלקיקים:** `Points` עם pool קבוע של 300 חלקיקים, בלי הקצאות בזמן ריצה.
+- **אבק:** מהגלגלים האחוריים, ויותר ממנו על חול.
+- **להבת טורבו:** 2 קונוסים emissive מהבהבים + חלקיקים כתומים.
+- **פיצוץ:** כדור כתום שמתרחב ודוהה + 20 חלקיקים + רעידת מצלמה.
+- **מגן:** `SphereGeometry` שקוף עם fresnel (או סתם `opacity 0.35` + פעימה). הוא מהבהב בשנייה האחרונה.
+- **ישויות:** מוקש (דיסק אדום מהבהב), שמן (דיסק שחור מבריק), חבית (גליל כתום עם פס), טיל (גליל + כנפיים + שובל), כדור (קפסולה צהובה זוהרת), קופסה (קובייה עם "?" ב-CanvasTexture, מסתובבת ומרחפת).
+
+### 11.6 מצלמה (`CameraRig.js`)
+
+- **מרדף:** המצלמה ממוקמת 6.5 מ' מאחורי המכונית ו-2.8 מ' מעליה, ומביטה לנקודה 4 מ' לפניה בגובה 1 מ'. המעקב עושה lerp על המיקום (`1 - exp(-8 dt)`) ועל הכיוון (`1 - exp(-6 dt)`), לפי heading המכונית.
+- **טורבו:** FOV משתנה מ-65 ל-78, והמצלמה מתרחקת ב-1.5 מ'.
+- **רעידה:** `shake(intensity)` עם דעיכה אקספוננציאלית.
+- **respawning:** fade לשחור דרך שכבת HTML.
+- **SPECTATE:** מצלמת מרדף על המכונית הראשונה שעדיין לא סיימה. הקשה על המסך עוברת למכונית הבאה.
+
+## 12. UI
+
+- כל ה-UI הוא HTML מעל ה-canvas (`#ui`). מכיוון שזה טלפון לרוחב, משתמשים ביחידות `vmin`.
+- **גופן:** `Rubik` מ-Google Fonts (תומך בעברית), עם fallback `system-ui`. הטקסט ב-`dir="rtl"`, אבל **מיקום הכפתורים קבוע פיזית**: טורבו משמאל ופריט מימין, גם ב-RTL. לכן הם מוגדרים ב-`left`/`right` ולא ב-logical properties.
+- **מסכים:** תפריט, כיול (עם אינדיקטור הגה מסתובב חי וסליידר 3 מצבים), ספירה (מספרים גדולים עם אנימציית scale), HUD, צפייה (טבלה חיה + "דלג") ותוצאות.
+- **HUD:**
+  - `#pos` למעלה משמאל ("1/4")
+  - `#timer` למעלה במרכז (`m:ss.t`)
+  - `#progress` – פס אופקי למעלה עם 4 נקודות צבעוניות. הנקודה של השחקן גדולה ועם מסגרת
+  - כפתורי טורבו ופריט
+  - כפתור השתקה קטן למעלה מימין
+- **עדכון HUD:** עד 10 פעמים בשנייה, ורק כשהערך השתנה. אסור לגעת ב-DOM בכל פריים.
+
+## 13. קבועים (`config.js`) – ערכי התחלה
+
+```js
+export const CONFIG = {
+  sim: { STEP: 1/60 },
+  car: {
+    CRUISE_SPEED: 32, ACCEL: 14, DECEL: 22, TURBO_ACCEL: 30,
+    TURBO_MULT: 1.6, TURBO_TIME: 2.5, TURBOS_PER_RACE: 2,
+    STEER_RATE: 1.9, MAX_YAW: 0.9, YAW_RETURN: 1.2, DRIFT_K: 0.55, STEER_SMOOTH: 12,
+    SAND_MULT: 0.6, GRAVITY: 22,
+    HIT_SPEED_MULT: { spin: 0.35, launch: 0.1, slip: 0.7, bump: 0.45 },
+    HIT_TIME: { spin: 1.5, launch: 1.5, slip: 1.5, bump: 1.0 },
+    RESPAWN_TIME: 1.5, INVULN_AFTER_RESPAWN: 1.5, STUCK_TIME: 3,
+    RADIUS: 1.1,
+  },
+  track: { LENGTH_TARGET: 2900, HALF_WIDTH: 9, SAND_EXTRA: 6, CHECKPOINT_EVERY: 80, SAMPLE_STEP: 1 },
+  items: { BOX_RESPAWN: 3, ROULETTE_TIME: 0.8, SHIELD_TIME: 6,
+           MISSILE_SPEED: 70, MISSILE_TURN: 12, BULLET_SPEED: 90, BULLET_RANGE: 120,
+           GUN_SHOTS: 5, GUN_INTERVAL: 0.12, GUN_SLOW_PER_HIT: 0.1, GUN_SLOW_MAX: 0.5, GUN_SLOW_DECAY: 0.25,
+           OWN_DROP_IMMUNITY: 1.5 },
+  bots: { RUBBER_RANGE: 250, RUBBER_MAX: 0.12, DODGE_SUCCESS: 0.7 },
+  tilt: { DEAD_ZONE_DEG: 3, MAX_ANGLE_DEG: { low: 38, normal: 30, high: 22 }, LOWPASS: 0.25, INVERT: false },
+  render: { MAX_PIXEL_RATIO: 1.5, FOG_NEAR: 120, FOG_FAR: 650, SHADOW_SIZE: 1024 },
+  countdown: { SECONDS: 3, START_BOOST_WINDOW: 0.25, START_BOOST_TIME: 0.8 },
+};
+```
+
+## 14. סאונד (`Sound.js`)
+
+- `AudioContext` נוצר ונפתח (`resume`) בלחיצה על "שחק".
+- **מנוע:** 2 `OscillatorNode` (sawtooth + square) דרך `BiquadFilter` lowpass. התדר הוא `60 + speed*3` Hz, ובטורבו הוא גבוה יותר ועם יותר gain. יש מנוע רק לשחקן.
+- **אפקטים חד-פעמיים:**
+  - פיצוץ: white noise עם envelope ו-lowpass יורד
+  - איסוף: שני טונים עולים
+  - טורבו: noise + sweep עולה
+  - ירי: click קצר
+  - ספירה: ביפ 440, ו-GO ב-880
+- **מוזיקה:** לופ פשוט של 4 אקורדים + bass ב-sequencer קטן (setInterval על `audioCtx.currentTime` עם lookahead), בעוצמה נמוכה.
+- **השתקה:** `masterGain.gain = 0`. המצב נשמר ב-localStorage.
+
+## 15. דיבאג ובדיקות
+
+### 15.1 פרמטרי URL
+
+| פרמטר | פעולה |
+|---|---|
+| `?debug=1` | שכבת דיבאג: FPS, draw calls, ערכי חיישן גולמיים, `roll`/`steer`, `s`/`d`/`speed` של השחקן. מפעיל גם מקלדת |
+| `?seed=123` | seed קבוע לכל האקראיות |
+| `?autopilot=1` | השחקן נשלט על ידי `BotDriver` (בלי rubber band). משמש לבדיקות ולכיוון אורך המסלול |
+| `?fast=1` | הסימולציה רצה מהר פי 4 (לבדיקת עשן) |
+| `?skipCalib=1` | מדלג על כיול (לבדיקות במחשב) |
+
+### 15.2 בדיקות יחידה (Vitest) – חובה
+
+- `tiltMath`: אזור מת, רוויה, `wrapPi`, וכל 4 זוויות המסך
+- `TrackModel`: אורך, `sample` ו-`toWorld` רציפים, `right` מאונך ל-`tangent`
+- `Car`: נסיעה ישר מגיעה ל-`CRUISE_SPEED`, קיר מוצמד, נפילה מצוק → respawn ב-checkpoint, טורבו נצרך פעמיים בלבד
+- **רמפות:** במהירות שיוט, כל רמפה עם `gap` נוחתת אחרי `gap.to`
+- `items`: ההגרלה מכבדת את טבלת המשקלים (חזרה על 10K הגרלות, סטייה של פחות מ-2%), ואין טיל במקום 1
+- `race`: דירוג חי וסיום
+- **סימולציה מלאה בלי רינדור:** 4 בוטים עם seed קבוע מסיימים כולם. זמן המנצח בין 80 ל-100 שניות
+
+### 15.3 בדיקת עשן (Playwright)
+
+`npm run build && npm run preview`, ואז פותחים בדפדפן את `?autopilot=1&fast=1&skipCalib=1&seed=1` בגודל 844×390 (טלפון לרוחב), ובודקים:
+- אין שגיאות קונסול
+- canvas מצויר
+- מגיעים למסך התוצאות תוך 60 שניות אמיתיות
+- בטבלת התוצאות יש 4 שורות
+
+## 16. הפצה
+
+- `vite.config.js` מגדיר `base: '/Don-Game/'`. שם הריפו ב-GitHub הוא `Don-Game`, אבל GitHub Pages רגיש לאותיות, אז מוודאים מול כתובת ה-Pages בפועל.
+- `.github/workflows/deploy.yml` רץ על push ל-`main`: `npm ci`, `npm test`, `npm run build`, ואז `actions/upload-pages-artifact` + `actions/deploy-pages`.
+- **פעולה ידנית של בעל הריפו (פעם אחת):** Settings → Pages → Source: **GitHub Actions**.
+- כתובת המשחק: `https://galnigal-code.github.io/Don-Game/`
+- **בדיקה מקומית בטלפון:** `npm run dev -- --host` עובד ברשת המקומית, אבל בלי HTTPS החיישנים לא יעבדו. לכן הבדיקה בטלפון נעשית דרך GitHub Pages.
+
+## 17. שלבי עבודה (Milestones)
+
+כל שלב נגמר ב-commit + push, ב-build ירוק ובבדיקות עוברות. אחרי כל שלב מדווחים למשתמש מה אפשר לנסות בקישור.
+
+| # | שלב | תוצר | הגדרת "גמור" |
+|---|---|---|---|
+| **M0** | שלד | Vite, three, מבנה תיקיות, `config.js`, Actions ל-Pages, README | הקישור ל-Pages מציג קובייה מסתובבת. `npm test` רץ |
+| **M1** | מסלול ונסיעה | `trackData`, `TrackModel`, `Car` (בלי פריטים), `TrackMesh` בסיסי, מצלמת מרדף, מקלדת | אפשר לנהוג במקלדת מההתחלה עד הסוף. קירות עובדים. בדיקות יחידה של מסלול ומכונית |
+| **M2** | הטיה וכיול | `TiltInput`, מסך כיול, overlay דיבאג, מסך מלא ונעילת כיוון, כפתורי מגע + טורבו | **בדיקה בטלפון אמיתי (על ידי המשתמש):** ההיגוי בכיוון הנכון ומרגיש טבעי |
+| **M3** | מרוץ מלא | 3 בוטים, rubber band, התנגשויות, ספירה וזינוק מהיר, HUD, צפייה, תוצאות, עוד מרוץ | מרוץ מלא מקצה לקצה. בדיקת עשן עוברת |
+| **M4** | פריטים | קופסאות, רולטה, 6 פריטים, שימוש של בוטים בפריטים | כל פריט עובד על שחקן ועל בוט. בדיקות items |
+| **M5** | מסלול "אמיתי" | רמפות, ערוצים, צוקים, נפילה ו-respawn, תקוע, קניון, מכשולים קבועים, כיוון אורך ל-~90 שניות | בדיקת רמפות + זמן מנצח בטווח 80–100 שניות |
+| **M6** | יופי | סביבת מדבר, מודל מכונית, שמיים, צללים, אפקטים, סאונד ומוזיקה | נראה "כמו משחק". 60 FPS במחשב |
+| **M7** | ביצועים וליטוש | pixel ratio אדפטיבי, בדיקת draw calls, תיקונים מהבדיקה בטלפון | ≥30 FPS בטלפון של המשתמש. כל קריטריוני ההצלחה ב-SPEC §15 מסומנים |
+
+**סדר עדיפויות כשנגמר הזמן:** M0–M3 הכרחיים, M4 הוא לב המשחק, ו-M5–M7 הם שיפורים.
+
+## 18. סיכונים ידועים
+
+| סיכון | הקלה |
+|---|---|
+| סימני החיישנים שונים בין מכשירים | `?debug=1` + `INVERT` בקונפיג + בדיקה בטלפון ב-M2 לפני שממשיכים |
+| ביצועים בטלפון חלש | pixel ratio אדפטיבי, InstancedMesh, צל אחד, בלי post-processing |
+| "על מסילה": היגוי במרחב המסלול מרגיש מלאכותי | `DRIFT_K` מכריח היגוי לתוך פניות, ו-`MAX_YAW` מאפשר זוויות חדות. מכווננים ב-M2 |
+| נעילת כיוון מסך נכשלת | שכבת "סובב את הטלפון" כגיבוי |
+| המסך נכבה באמצע מרוץ | `navigator.wakeLock?.request('screen')` ב-try/catch כשהמרוץ מתחיל |
+| מחוות דפדפן (משיכה לרענון, זום) | `touch-action:none`, `overscroll-behavior:none`, ו-viewport עם `user-scalable=no` |
