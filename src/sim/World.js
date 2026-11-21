@@ -5,6 +5,9 @@ import { createCar, stepCar } from './Car.js';
 import { createBrain, driveBot } from './BotDriver.js';
 import { resolveCarCollisions } from './collisions.js';
 import { computeRanks } from './race.js';
+import { BOX_ROWS } from './trackData.js';
+import { useItem, stepGun, stepBoxes, createBoxes } from './items.js';
+import { stepEntities } from './entities.js';
 
 export const BOT_NAMES = ['טורבו-טל', 'רוני רוקט', 'מאיה מהירה', 'דני דיונה', 'שירה שמן', 'אבי אבק', 'נועה נייטרו', 'יוסי יעלון'];
 export const BOT_COLORS = [0xf5c400, 0x1e6fff, 0x18b04a];
@@ -32,6 +35,7 @@ export function createWorld({ track, seed = 1, bots = 3 } = {}) {
 
   const world = {
     track, rng, time: 0, cars, player, brains,
+    entities: [], boxes: createBoxes(track, BOX_ROWS), events: [], entityId: 0, stats: { pickups: 0, uses: 0, hits: 0 },
     finishOrder: [], leaderS: 0, sincePlayerFinish: 0, ranked: computeRanks(cars),
 
     /** Race start: the player may get the start boost; some bots always may. */
@@ -58,6 +62,12 @@ export function createWorld({ track, seed = 1, bots = 3 } = {}) {
         car.input.speedMult = brain.skill * rb;
       }
       for (const car of cars) {
+        const want = !!car.input.item;
+        if (want && !car.prevItemInput) useItem(car, world);
+        car.prevItemInput = want;
+        stepGun(car, world, dt);
+      }
+      for (const car of cars) {
         stepCar(car, dt, track);
         if (car.state === 'finished' && car.finishTime == null) {
           car.finishTime = world.time;
@@ -65,6 +75,8 @@ export function createWorld({ track, seed = 1, bots = 3 } = {}) {
           car.place = world.finishOrder.length;
         }
       }
+      stepEntities(world, dt);
+      stepBoxes(world, dt);
       resolveCarCollisions(cars);
       world.ranked = computeRanks(cars);
 

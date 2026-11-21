@@ -6,7 +6,7 @@
 - איפיון טכני: [docs/TECH_SPEC.md](docs/TECH_SPEC.md)
 - משחק (אחרי שלב M0): https://galnigal-code.github.io/Don-Game/
 
-סטטוס: M3 (מרוץ מלא מול 3 בוטים) הושלם. הבא: M4 (פריטים). הבנייה ממשיכה לפי [TECH_SPEC §17](docs/TECH_SPEC.md).
+סטטוס: M4 (קופסאות ופריטים) הושלם. הבא: M5 (מסלול מלא: רמפות, מכשולים קבועים). הבנייה ממשיכה לפי [TECH_SPEC §17](docs/TECH_SPEC.md).
 
 ## פיתוח
 

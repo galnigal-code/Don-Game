@@ -25,3 +25,6 @@ export function heightAt(s) {
   const ramp = r * r * (3 - 2 * r);
   return ramp * (4 * Math.sin(s / 220) + 3 * Math.sin(s / 97 + 1));
 }
+
+// Item-box rows (s along the track). Each row spans the road (3 boxes in the narrow canyon, 4 elsewhere).
+export const BOX_ROWS = [300, 820, 1300, 1750, 2200, 2600];

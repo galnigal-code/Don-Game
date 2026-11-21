@@ -36,16 +36,17 @@ const res = await page.evaluate(() => {
   const w = __game.world, c = w.player;
   return { time: c.finishTime, respawns: c.respawns, place: c.place, cars: w.cars.length, finished: w.finishOrder.length,
     botRespawns: w.cars.filter((x) => !x.isPlayer).reduce((a, x) => a + x.respawns, 0),
-    rows: document.querySelectorAll('#result-table tr').length };
+    rows: document.querySelectorAll('#result-table tr').length, stats: w.stats };
 });
 if (shots) await page.screenshot({ path: `${shots}/result.png` });
 await browser.close();
 
-console.log(`race finished: player place ${res.place} in ${res.time.toFixed(1)} s (sim), respawns ${res.respawns}/${res.botRespawns} (player/bots), results rows ${res.rows}, wall time ${((Date.now() - t0) / 1000).toFixed(0)} s`);
+console.log(`race finished: player place ${res.place} in ${res.time.toFixed(1)} s (sim), respawns ${res.respawns}/${res.botRespawns} (player/bots), results rows ${res.rows}, items ${JSON.stringify(res.stats)}, wall time ${((Date.now() - t0) / 1000).toFixed(0)} s`);
 const problems = [];
 if (errors.length) problems.push('console errors: ' + JSON.stringify(errors));
 if (res.time < 80 || res.time > 105) problems.push('finish time out of range 80-105');
 if (res.respawns || res.botRespawns) problems.push('someone respawned during the autopilot race');
+if (res.stats.pickups < 5 || res.stats.uses < 3) problems.push('items were barely used: ' + JSON.stringify(res.stats));
 if (res.cars !== 4 || res.finished !== 4 || res.rows !== 4) problems.push('expected 4 cars, all finished, 4 result rows');
 if (problems.length) { console.error('SMOKE FAILED\n' + problems.join('\n')); process.exit(1); }
 console.log('SMOKE OK');

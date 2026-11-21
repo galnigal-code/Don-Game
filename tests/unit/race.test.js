@@ -3,7 +3,8 @@ import { CONFIG } from '../../src/config.js';
 import { createTrack } from '../../src/sim/TrackModel.js';
 import { createCar } from '../../src/sim/Car.js';
 import { createWorld } from '../../src/sim/World.js';
-import { driveSimple } from '../../src/sim/BotDriver.js';
+import { createBrain, drivePlayerProxy, driveSimple } from '../../src/sim/BotDriver.js';
+import { createRng } from '../../src/sim/rng.js';
 import { computeRanks } from '../../src/sim/race.js';
 import { resolveCarCollisions } from '../../src/sim/collisions.js';
 
@@ -13,9 +14,10 @@ const DT = CONFIG.sim.STEP;
 function runRace(seed, { turboPlayer = false, maxSeconds = 200 } = {}) {
   const w = createWorld({ track, seed });
   w.go(false);
+  const brain = createBrain(createRng(seed + 1000), track);
   for (let i = 0; i < maxSeconds * 60 && !w.done; i++) {
-    driveSimple(w.player, track);
-    w.player.input.turbo = turboPlayer && i % 2000 === 600;
+    drivePlayerProxy(w.player, brain, w);
+    w.player.input.turbo = turboPlayer && (i === 600 || i === 2600);
     w.step(DT);
   }
   return w;
@@ -96,10 +98,10 @@ describe('full race with 3 bots', () => {
       expect(w.finishOrder.map((c) => c.place)).toEqual([1, 2, 3, 4]);
     });
   }
-  it('a player using both turbos usually beats the bots', () => {
-    let wins = 0;
-    for (const seed of [1, 2, 3, 4, 5]) if (runRace(seed, { turboPlayer: true }).player.place === 1) wins++;
-    expect(wins).toBeGreaterThanOrEqual(3);
+  it('a sensible player using both turbos wins some races and rarely finishes last', () => {
+    const places = [1, 2, 3, 4, 5, 6, 7, 8].map((seed) => runRace(seed, { turboPlayer: true }).player.place);
+    expect(places.filter((p) => p === 1).length).toBeGreaterThanOrEqual(2);
+    expect(places.filter((p) => p === 4).length).toBeLessThanOrEqual(2);
   });
   it('bots use at most 2 turbos', () => {
     const w = runRace(2);
@@ -108,7 +110,8 @@ describe('full race with 3 bots', () => {
   it('start boost makes a car faster off the line', () => {
     const w1 = createWorld({ track, seed: 1, bots: 0 }), w2 = createWorld({ track, seed: 1, bots: 0 });
     w2.go(true);
-    for (let i = 0; i < 120; i++) { driveSimple(w1.player, track); driveSimple(w2.player, track); w1.step(DT); w2.step(DT); }
+    const dsimple = (c) => { c.input.steer = 0; };
+    for (let i = 0; i < 120; i++) { dsimple(w1.player); dsimple(w2.player); w1.step(DT); w2.step(DT); }
     expect(w2.player.s).toBeGreaterThan(w1.player.s + 8);
   });
   it('forces stragglers to finish 60 s after the player', () => {

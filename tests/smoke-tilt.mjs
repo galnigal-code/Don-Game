@@ -87,6 +87,25 @@ await page.waitForTimeout(1500);
 const inv = await page.evaluate(() => __game.world.player.d);
 check(inv < -1.5, `"invert direction" flips it (tilt right -> d=${inv.toFixed(1)})`);
 
+// item button: grab an item, the button lights up, tapping it uses the item
+await page.evaluate(() => { __game.toCalibrate(); });
+await page.click('#btn-start');
+await page.waitForFunction(() => __game.state === 'racing', null, { timeout: 8000 });
+check(await page.evaluate(() => document.getElementById('btn-item').disabled), 'item button is disabled without an item');
+check(await page.evaluate(() => document.getElementById('hud-timer') === null), 'live timer is gone from the HUD');
+await page.evaluate(() => { const c = __game.world.player; c.item = 'shield'; });
+await page.waitForTimeout(300);
+check(await page.evaluate(() => !document.getElementById('btn-item').disabled && document.getElementById('item-ico').textContent === '🛡️'), 'item button shows the held item (shield) and is enabled');
+await page.click('#btn-item', { force: true });
+await page.waitForTimeout(300);
+check(await page.evaluate(() => __game.world.player.shieldT > 4 && __game.world.player.item === null), 'tapping the item button uses the item');
+// roulette from a box
+await page.evaluate(() => { const w = __game.world, c = w.player, b = w.boxes[0]; c.s = b.s; c.d = b.d; c.item = null; c.rouletteT = 0; });
+await page.waitForTimeout(250);
+check(await page.evaluate(() => __game.world.player.rouletteT > 0 && document.getElementById('btn-item').classList.contains('rolling')), 'picking up a box starts the roulette on the button');
+await page.waitForTimeout(1200);
+check(await page.evaluate(() => __game.world.player.item !== null && document.getElementById('btn-item').classList.contains('ready')), 'after the roulette the item is ready');
+
 check(errors.length === 0, 'no console errors' + (errors.length ? ': ' + JSON.stringify(errors) : ''));
 await browser.close();
 if (fails.length) { console.error('\nTILT SMOKE FAILED'); process.exit(1); }

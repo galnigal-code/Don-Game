@@ -11,7 +11,7 @@ export function createCar({ id = 0, name = 'Player', color = 0xd0201c, isPlayer 
     s, d, h: 0, vy: 0, yaw: 0, speed: 0, steer: 0,
     input: { steer: 0, turbo: false, item: false },
     prevTurboInput: false, turbosLeft: C.TURBOS_PER_RACE, turboT: 0, boostT: 0, collideCooldown: 0, rank: 0,
-    item: null, gunShotsLeft: 0, gunCooldown: 0, shieldT: 0,
+    item: null, rouletteT: 0, prevItemInput: false, gunShotsLeft: 0, gunCooldown: 0, shieldT: 0,
     hit: { kind: null, t: 0 }, gunSlow: 0,
     state: 'driving', // driving | falling | respawning | finished
     fallT: 0, respawnT: 0, invulnT: 0, lastCheckpointS: 0, stuckT: 0, wallCooldown: 0,
@@ -30,7 +30,7 @@ export function activateTurbo(car) {
 function respawn(car) {
   car.s = car.lastCheckpointS; car.d = 0; car.yaw = 0; car.h = 0; car.vy = 0;
   car.speed = C.CRUISE_SPEED * 0.5; car.steer = 0;
-  car.hit.kind = null; car.hit.t = 0;
+  car.hit.kind = null; car.hit.t = 0; car.gunShotsLeft = 0;
   car.state = 'driving'; car.invulnT = C.INVULN_AFTER_RESPAWN;
   car.stuckT = 0; car.wallCooldown = 0; car.respawns++;
 }
@@ -64,10 +64,15 @@ export function stepCar(car, dt, track) {
   car.turboT = Math.max(0, car.turboT - dt);
   car.boostT = Math.max(0, car.boostT - dt);
   car.collideCooldown = Math.max(0, car.collideCooldown - dt);
+  car.rouletteT = Math.max(0, car.rouletteT - dt);
+  car.shieldT = Math.max(0, car.shieldT - dt);
   car.invulnT = Math.max(0, car.invulnT - dt);
   car.wallCooldown = Math.max(0, car.wallCooldown - dt);
   car.gunSlow = Math.max(0, car.gunSlow - CONFIG.items.GUN_SLOW_DECAY * dt);
-  if (car.hit.kind) { car.hit.t -= dt; if (car.hit.t <= 0) car.hit.kind = null; }
+  if (car.hit.kind) {
+    car.hit.t -= dt;
+    if (car.hit.t <= 0) { car.hit.kind = null; car.invulnT = Math.max(car.invulnT, CONFIG.items.HIT_IMMUNITY); }
+  }
 
   // turbo (rising edge of the input)
   const tp = !!input.turbo;
@@ -90,7 +95,7 @@ export function stepCar(car, dt, track) {
   target *= 1 - car.gunSlow;
   if (input.speedMult) target *= input.speedMult;
   const accel = car.turboT > 0 ? C.TURBO_ACCEL : C.ACCEL;
-  car.speed += clamp(target - car.speed, -C.DECEL * dt, accel * dt);
+  car.speed += clamp(target - car.speed, -(car.hit.kind ? C.HIT_DECEL : C.DECEL) * dt, accel * dt);
 
   // steering
   const raw = finished ? clamp(-car.d * 0.2 - car.yaw * 2, -1, 1) : clamp(input.steer || 0, -1, 1);

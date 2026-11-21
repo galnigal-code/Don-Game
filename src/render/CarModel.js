@@ -51,7 +51,10 @@ export function createCarModel(color, name = null) {
     const r = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.36, 8), rim); r.rotation.z = Math.PI / 2; w.add(r);
     root.add(w); wheels.push(w);
   }
+  const shield = new THREE.Mesh(new THREE.SphereGeometry(2.7, 18, 12),
+    new THREE.MeshBasicMaterial({ color: 0x4fd0ff, transparent: true, opacity: 0.32, depthWrite: false, toneMapped: false }));
+  shield.position.y = 0.9; shield.visible = false; root.add(shield);
   const label = name ? nameLabel(name, color) : null;
   if (label) root.add(label);
-  return { root, body, wheels, label };
+  return { root, body, wheels, label, shield };
 }

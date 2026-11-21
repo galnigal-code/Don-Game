@@ -1,18 +1,19 @@
 // HUD: position, timer, speed, progress dots, turbo + item buttons, countdown, spectate panel, results.
 // Turbo is physically on the LEFT, item on the RIGHT (also in RTL layout).
 const hex = (c) => '#' + c.toString(16).padStart(6, '0');
+const ICON = { mine: '💣', missile: '🚀', oil: '🛢️', gun: '🔫', shield: '🛡️', barrel: '🧱' };
+const ICON_LIST = Object.values(ICON);
 const fmt = (t) => { const m = Math.floor(t / 60); const s = t - m * 60; return `${m}:${s < 10 ? '0' : ''}${s.toFixed(1)}`; };
 
 export function createHud(root, { onRestart, onRecalibrate, onSkip }) {
   root.innerHTML = `
     <div id="hud-top">
       <div id="hud-pos"><span class="lbl">מקום</span><b>1</b><span class="of">/4</span></div>
-      <div id="hud-timer">0:00.0</div>
       <div id="hud-speed"><b>0</b> קמ"ש</div>
     </div>
     <div id="hud-progress"><div id="hud-dots"></div></div>
     <button id="btn-turbo" class="gbtn" aria-label="טורבו"><span class="ico">🔥</span><span id="turbo-count">2</span></button>
-    <button id="btn-item" class="gbtn" aria-label="פריט" disabled><span class="ico">🎁</span></button>
+    <button id="btn-item" class="gbtn" aria-label="פריט" disabled><span class="ico" id="item-ico">🎁</span></button>
     <div id="countdown" hidden></div>
     <div id="spectate" hidden>
       <div id="spectate-banner"></div>
@@ -33,7 +34,8 @@ export function createHud(root, { onRestart, onRecalibrate, onSkip }) {
     </div>`;
   const $ = (id) => root.querySelector('#' + id);
   const turbo = $('btn-turbo');
-  const hud = { turboHeld: false, turboPulse: false };
+  const item = $('btn-item');
+  const hud = { turboHeld: false, turboPulse: false, itemPulse: false };
   const press = (e) => { e.preventDefault(); hud.turboHeld = true; hud.turboPulse = true; navigator.vibrate?.(20); };
   const release = () => { hud.turboHeld = false; };
   turbo.addEventListener('pointerdown', press);
@@ -43,7 +45,9 @@ export function createHud(root, { onRestart, onRecalibrate, onSkip }) {
   $('btn-again').addEventListener('click', () => onRestart());
   $('btn-recalib').addEventListener('click', () => onRecalibrate());
   $('btn-skip').addEventListener('click', () => onSkip());
+  item.addEventListener('pointerdown', (e) => { e.preventDefault(); if (!item.disabled) { hud.itemPulse = true; navigator.vibrate?.(20); } });
   hud.consumePulse = () => { const p = hud.turboPulse; hud.turboPulse = false; return p; };
+  hud.consumeItemPulse = () => { const p = hud.itemPulse; hud.itemPulse = false; return p; };
 
   let last = {}, dots = [];
   const set = (key, el, text) => { if (last[key] !== text) { last[key] = text; el.textContent = text; } };
@@ -60,8 +64,7 @@ export function createHud(root, { onRestart, onRecalibrate, onSkip }) {
     });
   };
 
-  hud.update = ({ time, car, cars, length }) => {
-    set('t', $('hud-timer'), fmt(time));
+  hud.update = ({ car, cars, length }) => {
     $('hud-speed').firstElementChild.textContent = Math.round(car.speed * 3.6);
     const posEl = $('hud-pos');
     set('pos', posEl.querySelector('b'), String(car.finishTime != null ? car.place : car.rank));
@@ -74,6 +77,14 @@ export function createHud(root, { onRestart, onRecalibrate, onSkip }) {
     const active = car.turboT > 0;
     turbo.classList.toggle('active', active);
     turbo.classList.toggle('empty', car.turbosLeft === 0 && !active);
+    // item button: roulette while rolling, then the item
+    let icon = '🎁', usable = false, rolling = false;
+    if (car.rouletteT > 0) { icon = ICON_LIST[Math.floor(performance.now() / 90) % ICON_LIST.length]; rolling = true; }
+    else if (car.item) { icon = ICON[car.item]; usable = car.state === 'driving'; }
+    set('ico', $('item-ico'), icon);
+    if (item.disabled === usable) item.disabled = !usable;
+    item.classList.toggle('rolling', rolling);
+    item.classList.toggle('ready', usable);
     const fade = car.state === 'respawning' ? '1' : '0';
     if (last.f !== fade) { last.f = fade; $('fade').style.opacity = fade; }
   };

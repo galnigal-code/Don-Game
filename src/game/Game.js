@@ -2,11 +2,14 @@ import * as THREE from 'three';
 import { CONFIG } from '../config.js';
 import { createTrack } from '../sim/TrackModel.js';
 import { createWorld } from '../sim/World.js';
-import { driveSimple } from '../sim/BotDriver.js';
+import { createBrain, drivePlayerProxy } from '../sim/BotDriver.js';
+import { createRng } from '../sim/rng.js';
 import { createRenderer } from '../render/Renderer.js';
 import { buildTrackMesh } from '../render/TrackMesh.js';
 import { createCarModel } from '../render/CarModel.js';
 import { CameraRig } from '../render/CameraRig.js';
+import { EntityViews } from '../render/EntityViews.js';
+import { Effects } from '../render/Effects.js';
 import { KeyboardInput } from '../input/KeyboardInput.js';
 import { TouchSteerTemp } from '../input/TouchSteerTemp.js';
 import { TiltInput } from '../input/TiltInput.js';
@@ -33,6 +36,8 @@ export class Game {
     this.track = createTrack();
     this.scene.add(buildTrackMesh(this.track));
     this.rig = new CameraRig(this.camera);
+    this.entityViews = new EntityViews(this.scene, this.track);
+    this.effects = new Effects(this.scene);
 
     this.keyboard = new KeyboardInput();
     this.keyboard.onRestart = () => { if (this.state !== 'menu' && this.state !== 'calibrate') this.beginRace(); };
@@ -93,6 +98,8 @@ export class Game {
     for (const v of this.views) this.scene.remove(v.root);
     const seed = this.fixedSeed ?? ((Math.random() * 1e9) | 0);
     this.world = createWorld({ track: this.track, seed });
+    this.autoBrain = createBrain(createRng(seed + 1000), this.track);   // used by ?autopilot=1
+    this.entityViews.setWorld(this.world);
     this.views = this.world.cars.map((car) => {
       const v = createCarModel(car.color, car.isPlayer ? null : car.name);
       this.scene.add(v.root);
@@ -168,12 +175,13 @@ export class Game {
   simStep() {
     const w = this.world, car = w.player;
     if (car.state !== 'finished') {
-      if (this.autopilot) driveSimple(car, this.track);
+      if (this.autopilot) drivePlayerProxy(car, this.autoBrain, w);
       else {
         const kb = this.keyboard.update(STEP);
         // tilt wins when the phone reports motion; touch-halves steering is only a fallback
         car.input.steer = clamp(this.tilt.active ? this.tilt.steer + kb : kb + this.touch.steer, -1, 1);
         car.input.turbo = this.readTurbo();
+        car.input.item = this.keyboard.item || this.hud.consumeItemPulse();
       }
     }
     w.step(STEP);
@@ -211,6 +219,30 @@ export class Game {
 
   /* ---------- drawing ---------- */
 
+  /** Turn simulation events into visual effects (and camera shake for the player). */
+  handleEvents(target) {
+    const evs = this.world.events;
+    if (this.skipping) { evs.length = 0; return; }
+    const T = this.track, p = this.world.player, tmp = this.tmpWorld;
+    for (const e of evs) {
+      if (e.type === 'explosion') {
+        T.toWorld(e.s, e.d, 0.8, tmp);
+        this.effects.explosion(tmp.x, tmp.y, tmp.z);
+        if (Math.abs(e.s - target.s) < 25) this.rig.shake(0.18);
+      } else if (e.type === 'hit' && e.carId === p.id) {
+        this.rig.shake(0.35);
+      } else if (e.type === 'shield') {
+        const c = this.world.cars.find((x) => x.id === e.carId);
+        T.toWorld(c.s, c.d, 1, tmp); this.effects.puff(tmp.x, tmp.y, tmp.z);
+      } else if (e.type === 'pickup') {
+        const b = this.world.boxes[e.boxId];
+        T.toWorld(b.s, b.d, 1.3, tmp); this.effects.sparkle(tmp.x, tmp.y, tmp.z);
+      }
+    }
+    evs.length = 0;
+  }
+
+
   updateViews(dt) {
     const T = this.track;
     this.world.cars.forEach((car, i) => {
@@ -220,7 +252,13 @@ export class Game {
       const heading = sm.heading + car.yaw;
       v.root.position.set(this.tmpWorld.x, this.tmpWorld.y, this.tmpWorld.z);
       v.root.rotation.set(Math.atan2(sm.ty, Math.hypot(sm.tx, sm.tz)), -heading, 0, 'YXZ');
-      v.body.rotation.z = car.steer * 0.07;
+      const k = car.hit.kind;
+      const p = k ? 1 - car.hit.t / CONFIG.car.HIT_TIME[k] : 0;
+      v.body.rotation.z = car.steer * 0.07 + (k === 'bump' ? Math.sin(p * 30) * 0.08 : 0);
+      v.body.rotation.y = k === 'spin' ? p * Math.PI * 4 : k === 'slip' ? Math.sin(car.t * 9) * 0.45 : 0;
+      v.body.rotation.x = k === 'launch' ? -p * Math.PI * 2 : 0;
+      v.body.position.y = k === 'bump' ? Math.abs(Math.sin(p * Math.PI * 3)) * 0.45 : 0;
+      v.shield.visible = car.shieldT > 0 && (car.shieldT > 1 || Math.floor(car.t * 8) % 2 === 0);
       for (const w of v.wheels) w.rotation.x -= (car.speed * dt) / 0.4;
       let visible = car.state !== 'respawning';
       if (car.invulnT > 0) visible = visible && Math.floor(car.t * 10) % 2 === 0;
@@ -245,8 +283,10 @@ export class Game {
     if (player.wallHit) { if (target === player) this.rig.shake(0.12); player.wallHit = false; }
     this.rig.update(dt, this.tmpPos, cw.heading, target.turboT > 0);
 
-    const time = player.finishTime ?? w.time;
-    this.hud.update({ time, car: player, cars: w.cars, length: this.track.finishS });
+    this.handleEvents(target);
+    this.entityViews.update(performance.now() / 1000, w);
+    this.effects.update(dt);
+    this.hud.update({ car: player, cars: w.cars, length: this.track.finishS });
     if (this.state === 'spectate') this.hud.updateStandings(w.ranked, this.specId);
     this.renderer.render(this.scene, this.camera);
   }
