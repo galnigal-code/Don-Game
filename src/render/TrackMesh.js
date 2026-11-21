@@ -32,6 +32,18 @@ function checkerTexture(cols, rows) {
   return t;
 }
 
+function rampTexture() {
+  const c = document.createElement('canvas');
+  c.width = 128; c.height = 128;
+  const g = c.getContext('2d');
+  g.fillStyle = '#f2c200'; g.fillRect(0, 0, 128, 128);
+  g.fillStyle = '#1b1b1b';
+  for (let i = -128; i < 256; i += 64) { g.beginPath(); g.moveTo(i, 128); g.lineTo(i + 32, 128); g.lineTo(i + 96, 0); g.lineTo(i + 64, 0); g.closePath(); g.fill(); }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+  return t;
+}
+
 class Strip {
   constructor() { this.pos = []; this.uv = []; this.idx = []; this.prev = -1; this.count = 0; }
   row(a, b, v = 0) {
@@ -84,8 +96,10 @@ export function buildTrackMesh(track) {
   let key = null, prevSm = null, prevEdges = null;
   const endAll = () => { for (const k in strips) strips[k].strip.end(); };
   const n = track.samples.length;
+  const gapFrom = new Set(track.gaps.map((g) => g.from));
   for (let k = 0; k < n; k += 2) {
     const sm = track.samples[k];
+    if (track.inGap(sm.s)) continue;                  // the road is missing here (trench below)
     S('road').row(P(sm, -sm.halfWidth, 0), P(sm, sm.halfWidth, 0), sm.s / 10);
     const kk = sm.edgeLeft + '|' + sm.edgeRight;
     if (key !== null && kk !== key) {           // close the previous run on this row, then start a new one
@@ -94,6 +108,7 @@ export function buildTrackMesh(track) {
     }
     side(sm, -1, sm.edgeLeft); side(sm, 1, sm.edgeRight);
     key = kk; prevEdges = [sm.edgeLeft, sm.edgeRight]; prevSm = sm;
+    if (gapFrom.has(sm.s)) { endAll(); key = null; }  // road ends at the lip; the next run starts after the gap
   }
   void prevSm;
   for (const k in strips) {
@@ -124,6 +139,30 @@ export function buildTrackMesh(track) {
   }
   line(0);
   line(track.finishS);
+
+  // ramps (a wedge the car drives up) and the trench under every gap
+  const rampMat = new THREE.MeshStandardMaterial({ map: rampTexture(), roughness: 0.7, side: THREE.DoubleSide });
+  const trenchMat = new THREE.MeshStandardMaterial({ color: 0x5c2a16, roughness: 1, side: THREE.BackSide });
+  for (const r of track.ramps) {
+    const a = track.sample(r.s - r.len), b = track.sample(r.s), hw = a.halfWidth;
+    const pts = [
+      [a.px - a.rx * hw, a.py + 0.02, a.pz - a.rz * hw], [a.px + a.rx * hw, a.py + 0.02, a.pz + a.rz * hw],
+      [b.px - b.rx * hw, b.py + r.rise, b.pz - b.rz * hw], [b.px + b.rx * hw, b.py + r.rise, b.pz + b.rz * hw],
+    ];
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pts.flat(), 3));
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, hw / 2, 0, 0, 1.5, hw / 2, 1.5], 2));
+    geo.setIndex([0, 1, 2, 1, 3, 2]); geo.computeVertexNormals();
+    group.add(new THREE.Mesh(geo, rampMat));
+    if (r.gap) {
+      const mid = track.sample((r.gap.from + r.gap.to) / 2), len = r.gap.to - r.gap.from;
+      const w = (mid.halfWidth + SE + 3) * 2, depth = 16;
+      const box = new THREE.Mesh(new THREE.BoxGeometry(w, depth, len), trenchMat);
+      box.position.set(mid.px, mid.py - depth / 2 - 0.05, mid.pz);
+      box.rotation.set(0, -mid.heading, 0);
+      group.add(box);
+    }
+  }
 
   return group;
 }

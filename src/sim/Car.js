@@ -84,7 +84,8 @@ export function stepCar(car, dt, track) {
   const side0 = car.d < 0 ? -1 : 1;
   const edge0 = side0 < 0 ? sm.edgeLeft : sm.edgeRight;
   car.offroad = edge0 === 'sand' && Math.abs(car.d) > hw;
-  const air = car.h > 0.001 || car.vy > 0;
+  const gh = track.groundHeight(car.s);
+  const air = car.h > gh + 0.001 || car.vy > 0;
 
   // speed
   let target = finished ? 0 : C.CRUISE_SPEED;
@@ -117,14 +118,22 @@ export function stepCar(car, dt, track) {
     ds = car.speed * Math.cos(car.yaw) * dt;
     dd = car.speed * Math.sin(car.yaw) * dt;
   }
+  const prevS = car.s;
   car.s += ds; car.d += dd;
   if (car.s > track.maxS) { car.s = track.maxS; car.speed = 0; }
 
-  // vertical
-  if (air) {
-    car.vy -= C.GRAVITY * dt; car.h += car.vy * dt;
-    if (car.h <= 0) { car.h = 0; car.vy = 0; }
+  // vertical: follow the ground (ramps), launch at the end of a ramp, fly, land
+  if (!air && !finished) {
+    const r = track.rampCrossed(prevS, car.s);
+    if (r) { car.vy = r.launchVy; car.h = track.groundHeight(r.s); }
   }
+  const gh2 = track.groundHeight(car.s);
+  if (air || car.vy > 0) {
+    car.vy -= C.GRAVITY * dt; car.h += car.vy * dt;
+    if (car.h <= gh2 && car.vy <= 0) { car.h = gh2; car.vy = 0; }
+  } else car.h = gh2;
+  // road missing here and we are on the ground: fall into the trench
+  if (!finished && car.vy === 0 && car.h <= gh2 + 0.001 && track.inGap(car.s)) { startFall(car); return; }
 
   // edges
   const side = car.d < 0 ? -1 : 1;
@@ -143,7 +152,7 @@ export function stepCar(car, dt, track) {
 
   // checkpoints & stuck detection
   if (car.state === 'driving') {
-    if (!air && Math.abs(car.d) <= hw) {
+    if (!air && Math.abs(car.d) <= hw && !track.inGap(car.s)) {
       car.lastCheckpointS = Math.max(car.lastCheckpointS, Math.floor(Math.max(0, car.s) / CONFIG.track.CHECKPOINT_EVERY) * CONFIG.track.CHECKPOINT_EVERY);
     }
     car.stuckT = car.speed < 3 ? car.stuckT + dt : 0;

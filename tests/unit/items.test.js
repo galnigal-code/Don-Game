@@ -19,6 +19,7 @@ function world(positions) {
   w.cars.push(...positions.map(([s, d], i) => { const c = createCar({ id: i, s, d, isPlayer: i === 0 }); c.speed = 0; return c; }));
   w.player = w.cars[0];
   w.boxes = [];
+  w.entities = [];   // no fixed obstacles in these arenas
   return w;
 }
 const tick = (w, sec) => { for (let i = 0; i < sec / DT; i++) w.step(DT); };

@@ -1,7 +1,7 @@
 // Pure track model (no three.js). Builds a smooth centerline from trackData and
 // exposes sampling in "track space": s (along), d (lateral, + = right), h (height).
 import { CONFIG } from '../config.js';
-import { TRACK_PATH, SEGMENTS, LEAD_IN, RUN_OUT, heightAt } from './trackData.js';
+import { TRACK_PATH, SEGMENTS, LEAD_IN, RUN_OUT, RAMPS, heightAt } from './trackData.js';
 
 const smooth01 = (t) => { t = Math.min(1, Math.max(0, t)); return t * t * (3 - 2 * t); };
 
@@ -52,7 +52,7 @@ function sectionInfo(s, segments) {
   return { hw, edgeLeft, edgeRight };
 }
 
-export function createTrack(path = TRACK_PATH, segments = SEGMENTS) {
+export function createTrack(path = TRACK_PATH, segments = SEGMENTS, ramps = RAMPS) {
   const STEP = CONFIG.track.SAMPLE_STEP;
   const ctrl = controlPoints(path);
   const ext = [
@@ -123,6 +123,7 @@ export function createTrack(path = TRACK_PATH, segments = SEGMENTS) {
   const track = {
     samples, minS, maxS, finishS, step: STEP,
     length: finishS, // race length (start line -> finish line)
+    ramps, gaps: ramps.filter((r) => r.gap).map((r) => r.gap),
     /** Interpolated sample at s. Writes into `out` (reuse it to avoid garbage). */
     sample(s, out = {}) {
       const x = (Math.min(maxS, Math.max(minS, s)) - minS) / STEP;
@@ -142,6 +143,25 @@ export function createTrack(path = TRACK_PATH, segments = SEGMENTS) {
       const near = f < 0.5 ? A : B;
       out.edgeLeft = near.edgeLeft; out.edgeRight = near.edgeRight;
       return out;
+    },
+    /** Height of the driving surface above the road plane (non-zero only on a ramp slope). */
+    groundHeight(s) {
+      for (const r of ramps) if (s >= r.s - r.len && s <= r.s) return r.rise * (s - (r.s - r.len)) / r.len;
+      return 0;
+    },
+    groundSlope(s) {
+      for (const r of ramps) if (s >= r.s - r.len && s <= r.s) return r.rise / r.len;
+      return 0;
+    },
+    /** The ramp whose launch line was crossed between prevS and s (or null). */
+    rampCrossed(prevS, s) {
+      for (const r of ramps) if (prevS < r.s && s >= r.s) return r;
+      return null;
+    },
+    /** True where the road is missing (a car on the ground there falls). */
+    inGap(s) {
+      for (const r of ramps) if (r.gap && s > r.gap.from && s < r.gap.to) return true;
+      return false;
     },
     /** World position for track coordinates (s, d lateral, h above road). */
     toWorld(s, d, h = 0, out = {}) {

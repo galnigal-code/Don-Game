@@ -251,7 +251,11 @@ export class Game {
       T.toWorld(car.s, car.d, car.h, this.tmpWorld);
       const heading = sm.heading + car.yaw;
       v.root.position.set(this.tmpWorld.x, this.tmpWorld.y, this.tmpWorld.z);
-      v.root.rotation.set(Math.atan2(sm.ty, Math.hypot(sm.tx, sm.tz)), -heading, 0, 'YXZ');
+      let pitch = Math.atan2(sm.ty, Math.hypot(sm.tx, sm.tz));
+      const gh = T.groundHeight(car.s);
+      if (car.h <= gh + 0.05) pitch += Math.atan(T.groundSlope(car.s));                          // driving up a ramp
+      else if (car.state === 'driving' && !car.hit.kind) pitch += Math.max(-0.35, Math.min(0.35, car.vy * 0.03));   // nose follows the flight
+      v.root.rotation.set(pitch, -heading, 0, 'YXZ');
       const k = car.hit.kind;
       const p = k ? 1 - car.hit.t / CONFIG.car.HIT_TIME[k] : 0;
       v.body.rotation.z = car.steer * 0.07 + (k === 'bump' ? Math.sin(p * 30) * 0.08 : 0);

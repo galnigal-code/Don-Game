@@ -5,7 +5,7 @@ import { createCar, stepCar } from './Car.js';
 import { createBrain, driveBot } from './BotDriver.js';
 import { resolveCarCollisions } from './collisions.js';
 import { computeRanks } from './race.js';
-import { BOX_ROWS } from './trackData.js';
+import { BOX_ROWS, FIXED_OBSTACLES } from './trackData.js';
 import { useItem, stepGun, stepBoxes, createBoxes } from './items.js';
 import { stepEntities } from './entities.js';
 
@@ -33,9 +33,10 @@ export function createWorld({ track, seed = 1, bots = 3 } = {}) {
     brains.set(car, createBrain(rng, track));
   }
 
+  const fixed = FIXED_OBSTACLES.map((o, i) => ({ id: i + 1, type: o.kind, s: o.s, d: o.d, ownerId: -1, age: 0, alive: true, travel: 0, fixed: true }));
   const world = {
     track, rng, time: 0, cars, player, brains,
-    entities: [], boxes: createBoxes(track, BOX_ROWS), events: [], entityId: 0, stats: { pickups: 0, uses: 0, hits: 0 },
+    entities: fixed, boxes: createBoxes(track, BOX_ROWS), events: [], entityId: fixed.length, stats: { pickups: 0, uses: 0, hits: 0 },
     finishOrder: [], leaderS: 0, sincePlayerFinish: 0, ranked: computeRanks(cars),
 
     /** Race start: the player may get the start boost; some bots always may. */

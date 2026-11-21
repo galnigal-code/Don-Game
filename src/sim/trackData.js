@@ -28,3 +28,22 @@ export function heightAt(s) {
 
 // Item-box rows (s along the track). Each row spans the road (3 boxes in the narrow canyon, 4 elsewhere).
 export const BOX_ROWS = [300, 820, 1300, 1750, 2200, 2600];
+
+// Ramps. The car follows the ramp surface (rise over len metres ending at s) and is launched at s.
+// With a gap, the road is missing between gap.from and gap.to: land beyond it or fall (respawn at the checkpoint).
+// Flight distance = speed * 2*launchVy/gravity, so a ramp needs at least ~21 m/s to clear a 16 m gap.
+export const RAMPS = [
+  { s: 420, rise: 1.4, len: 6, launchVy: 11, gap: null },                      // just a hop
+  { s: 980, rise: 1.4, len: 6, launchVy: 11, gap: { from: 984, to: 1000 } },
+  { s: 1630, rise: 1.4, len: 6, launchVy: 11, gap: { from: 1634, to: 1650 } },
+  { s: 2450, rise: 1.4, len: 6, launchVy: 11, gap: { from: 2454, to: 2470 } },
+];
+
+// Fixed obstacles: barrels break when hit, rocks stay. Both cost a bump (~1 s slow).
+export const FIXED_OBSTACLES = [
+  { s: 540, d: 3.5, kind: 'barrel' }, { s: 600, d: -4, kind: 'rock' },
+  { s: 880, d: -3, kind: 'barrel' }, { s: 880, d: 4, kind: 'barrel' },
+  { s: 1100, d: 0, kind: 'rock' }, { s: 1220, d: -2.5, kind: 'rock' }, { s: 1340, d: 2.5, kind: 'barrel' },
+  { s: 1480, d: -4, kind: 'barrel' }, { s: 1800, d: 3, kind: 'rock' }, { s: 2100, d: -3.5, kind: 'barrel' },
+  { s: 2300, d: 4, kind: 'rock' }, { s: 2560, d: -3, kind: 'barrel' }, { s: 2700, d: 2, kind: 'rock' },
+];

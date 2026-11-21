@@ -36,6 +36,15 @@ function makeMine() {
   }
   return g;
 }
+function makeRock() {
+  const g = new THREE.Group();
+  const m = new THREE.Mesh(new THREE.DodecahedronGeometry(1.1, 0), new THREE.MeshStandardMaterial({ color: 0x93502d, roughness: 1, flatShading: true }));
+  m.scale.set(1.15, 0.8, 1.3); m.position.y = 0.6; m.rotation.set(0.3, 0.8, 0.2);
+  const m2 = new THREE.Mesh(new THREE.DodecahedronGeometry(0.6, 0), new THREE.MeshStandardMaterial({ color: 0xa96438, roughness: 1, flatShading: true }));
+  m2.position.set(0.9, 0.35, 0.5);
+  g.add(m, m2);
+  return g;
+}
 function makeOil() {
   const m = new THREE.Mesh(new THREE.CircleGeometry(2.1, 24), MAT.oil);
   m.rotation.x = -Math.PI / 2; m.position.y = 0.07;
@@ -64,7 +73,7 @@ function makeBullet() {
   const m = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.16, 1.1), MAT.bullet);
   const g = new THREE.Group(); m.position.y = 0.9; g.add(m); return g;
 }
-const MAKERS = { mine: makeMine, oil: makeOil, barrel: makeBarrel, missile: makeMissile, bullet: makeBullet };
+const MAKERS = { mine: makeMine, rock: makeRock, oil: makeOil, barrel: makeBarrel, missile: makeMissile, bullet: makeBullet };
 
 export class EntityViews {
   constructor(scene, track) {

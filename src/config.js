@@ -19,7 +19,7 @@ export const CONFIG = {
     OWN_DROP_IMMUNITY: 1.5, DROP_BEHIND: 3, HIT_IMMUNITY: 0.5, LAUNCH_VY: 9,
     BOX_LANES: [-6, -2, 2, 6], BOX_LANES_NARROW: [-3.5, 0, 3.5], BOX_REACH_S: 1.5, BOX_REACH_D: 1.6, BOX_MAX_H: 1.5,
     // extra reach added to the car's ellipse when testing a hit
-    REACH: { mine: 0.8, oil: 1.2, barrel: 0.7, missile: 0.8, bullet: 0.4 },
+    REACH: { mine: 0.8, oil: 1.2, barrel: 0.7, rock: 0.9, missile: 0.8, bullet: 0.4 },
     LIFE: { mine: 25, oil: 20, barrel: 30 }, MISSILE_RANGE_NO_TARGET: 200, MISSILE_RANGE_MAX: 450,
   },
   bots: { RUBBER_RANGE: 250, RUBBER_SLOW_MAX: 0.2, RUBBER_BOOST_MAX: 0.08, DODGE_SUCCESS: 0.7 },

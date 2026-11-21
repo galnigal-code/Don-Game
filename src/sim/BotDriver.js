@@ -63,7 +63,7 @@ export function driveBot(car, brain, world) {
 }
 
 
-const HARMFUL = new Set(['mine', 'oil', 'barrel']);
+const HARMFUL = new Set(['mine', 'oil', 'barrel', 'rock']);
 
 /** Aim at an item box when empty-handed, steer around traps (most of the time). */
 export function avoidAndCollect(car, brain, world, target) {

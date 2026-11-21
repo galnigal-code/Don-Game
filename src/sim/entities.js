@@ -11,7 +11,9 @@ export function stepEntities(world, dt) {
     e.age += dt;
 
     // movement & lifetime
-    if (e.type === 'mine' || e.type === 'oil' || e.type === 'barrel') {
+    if (e.fixed) {
+      // fixed obstacles never expire
+    } else if (e.type === 'mine' || e.type === 'oil' || e.type === 'barrel') {
       if (e.age > I.LIFE[e.type]) e.alive = false;
     } else if (e.type === 'missile') {
       const target = e.targetId != null ? cars.find((c) => c.id === e.targetId) : null;
@@ -36,7 +38,9 @@ export function stepEntities(world, dt) {
       const ds = (e.s - car.s) / A, dd = (e.d - car.d) / B;
       if (ds * ds + dd * dd >= 1) continue;
 
-      if (e.type === 'oil') { applyHit(car, 'slip', world); continue; }   // oil stays and can catch many cars
+      // oil and rocks stay and can catch many cars
+      if (e.type === 'oil') { applyHit(car, 'slip', world); continue; }
+      if (e.type === 'rock') { applyHit(car, 'bump', world); continue; }
       if (e.type === 'bullet') {
         if (car.invulnT > 0) continue;
         if (car.shieldT > 0) world.events.push({ type: 'shield', carId: car.id });
