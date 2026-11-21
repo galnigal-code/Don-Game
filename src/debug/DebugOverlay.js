@@ -1,0 +1,21 @@
+// ?debug=1 overlay: FPS, draw calls, player state.
+export function createDebugOverlay(root, renderer) {
+  const el = document.createElement('pre');
+  el.id = 'debug';
+  root.appendChild(el);
+  let frames = 0, acc = 0, fps = 0, lastText = 0;
+  return {
+    frame(dt, game) {
+      frames++; acc += dt;
+      if (acc >= 0.5) { fps = frames / acc; frames = 0; acc = 0; }
+      const now = performance.now();
+      if (now - lastText < 250) return;
+      lastText = now;
+      const c = game.world.player;
+      el.textContent =
+        `FPS ${fps.toFixed(0)}  calls ${renderer.info.render.calls}  tris ${renderer.info.render.triangles}\n` +
+        `s ${c.s.toFixed(0)}  d ${c.d.toFixed(1)}  v ${c.speed.toFixed(1)}  yaw ${c.yaw.toFixed(2)}  steer ${c.steer.toFixed(2)}\n` +
+        `state ${c.state}  turbo ${c.turbosLeft}  respawns ${c.respawns}`;
+    },
+  };
+}

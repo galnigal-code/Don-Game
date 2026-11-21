@@ -6,7 +6,7 @@
 - איפיון טכני: [docs/TECH_SPEC.md](docs/TECH_SPEC.md)
 - משחק (אחרי שלב M0): https://galnigal-code.github.io/Don-Game/
 
-סטטוס: M0 (שלד) הושלם. הבנייה ממשיכה לפי [TECH_SPEC §17](docs/TECH_SPEC.md).
+סטטוס: M1 (מסלול ונסיעה) הושלם. הבנייה ממשיכה לפי [TECH_SPEC §17](docs/TECH_SPEC.md).
 
 ## פיתוח
 
@@ -15,4 +15,11 @@ npm install
 npm run dev      # שרת פיתוח
 npm test         # בדיקות יחידה
 npm run build    # בנייה ל-dist
+npm run smoke    # בדיקת עשן ב-Chromium (אחרי build + preview)
 ```
+
+## בקרות בשלב הנוכחי (M1)
+
+- מקלדת: חצים / A,D להיגוי, Shift או חץ למעלה לטורבו, R להתחלה מחדש
+- טלפון (זמני עד M2): נגיעה בחצי השמאלי / הימני של המסך להיגוי, כפתור האש לטורבו
+- פרמטרים בכתובת: `?debug=1` (FPS ונתונים), `?autopilot=1` (נהג אוטומטי), `?fast=4`, `?seed=N`
