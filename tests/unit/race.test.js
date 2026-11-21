@@ -11,13 +11,12 @@ import { resolveCarCollisions } from '../../src/sim/collisions.js';
 const track = createTrack();
 const DT = CONFIG.sim.STEP;
 
-function runRace(seed, { turboPlayer = false, maxSeconds = 200 } = {}) {
+function runRace(seed, { turboPlayer = true, maxSeconds = 200 } = {}) {
   const w = createWorld({ track, seed });
   w.go(false);
   const brain = createBrain(createRng(seed + 1000), track);
   for (let i = 0; i < maxSeconds * 60 && !w.done; i++) {
-    drivePlayerProxy(w.player, brain, w);
-    w.player.input.turbo = turboPlayer && (i === 600 || i === 2600);
+    drivePlayerProxy(w.player, brain, w, { turbo: turboPlayer });
     w.step(DT);
   }
   return w;

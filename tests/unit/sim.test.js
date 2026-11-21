@@ -111,15 +111,42 @@ describe('Car', () => {
     expect(car.d).toBe(0);
     expect(car.lastCheckpointS % CONFIG.track.CHECKPOINT_EVERY).toBe(0);
   });
-  it('has exactly 2 turbos per race', () => {
+  it('starts with 2 turbos, spends one per press and does not waste a press while active', () => {
     const car = createCar({ s: 0 });
     const press = () => { car.input.turbo = true; stepCar(car, DT, track); car.input.turbo = false; stepCar(car, DT, track); };
+    expect(car.turbosLeft).toBe(C.TURBO_MAX);
     press(); expect(car.turbosLeft).toBe(1); expect(car.turboT).toBeGreaterThan(0);
-    press(); expect(car.turbosLeft).toBe(1); // still active, not wasted
+    press(); expect(car.turbosLeft).toBe(1);               // still active: not wasted
     run(car, C.TURBO_TIME + 0.2);
     press(); expect(car.turbosLeft).toBe(0);
-    run(car, C.TURBO_TIME + 0.2);
-    press(); expect(car.turbosLeft).toBe(0);
+    press(); expect(car.turbosLeft).toBe(0);               // nothing left to spend
+  });
+  it('recharges one turbo every 7 seconds, up to 2 stored', () => {
+    expect(C.TURBO_RECHARGE).toBe(7);
+    const car = createCar({ s: 0 });
+    const press = () => { car.input.turbo = true; stepCar(car, DT, track); car.input.turbo = false; stepCar(car, DT, track); };
+    const t0 = car.t;                                       // the first turbo is spent right now: the 7 s timer starts
+    press(); run(car, C.TURBO_TIME + 0.1);
+    press(); run(car, C.TURBO_TIME + 0.1);
+    expect(car.turbosLeft).toBe(0);
+    while (car.turbosLeft < 1) run(car, 0.05);
+    expect(car.t - t0).toBeGreaterThan(C.TURBO_RECHARGE - 0.2);
+    expect(car.t - t0).toBeLessThan(C.TURBO_RECHARGE + 0.3);
+    const t1 = car.t;
+    while (car.turbosLeft < 2) run(car, 0.05);
+    expect(car.t - t1).toBeGreaterThan(C.TURBO_RECHARGE - 0.2);
+    expect(car.t - t1).toBeLessThan(C.TURBO_RECHARGE + 0.3);
+    run(car, 20);
+    expect(car.turbosLeft).toBe(2);                         // never above the maximum
+  });
+  it('the recharge timer does not run while full, so the next one takes the full 7 s', () => {
+    const car = createCar({ s: 0 });
+    run(car, 10);
+    expect(car.turboRecharge).toBe(0);
+    car.input.turbo = true; stepCar(car, DT, track); car.input.turbo = false;
+    expect(car.turbosLeft).toBe(1);
+    run(car, 6.8); expect(car.turbosLeft).toBe(1);
+    run(car, 0.4); expect(car.turbosLeft).toBe(2);
   });
   it('turbo makes the car faster', () => {
     const a = createCar({ s: 0 }), b = createCar({ s: 0 });

@@ -1,3 +1,5 @@
+import { CONFIG } from '../config.js';
+
 // HUD: position, timer, speed, progress dots, turbo + item buttons, countdown, spectate panel, results.
 // Turbo is physically on the LEFT, item on the RIGHT (also in RTL layout).
 const hex = (c) => '#' + c.toString(16).padStart(6, '0');
@@ -12,7 +14,7 @@ export function createHud(root, { onRestart, onRecalibrate, onSkip }) {
       <div id="hud-speed"><b>0</b> קמ"ש</div>
     </div>
     <div id="hud-progress"><div id="hud-dots"></div></div>
-    <button id="btn-turbo" class="gbtn" aria-label="טורבו"><span class="ico">🔥</span><span id="turbo-count">2</span></button>
+    <button id="btn-turbo" class="gbtn" aria-label="טורבו"><span id="turbo-ring"></span><span class="ico">🔥</span><span id="turbo-count">2</span></button>
     <button id="btn-item" class="gbtn" aria-label="פריט" disabled><span class="ico" id="item-ico">🎁</span></button>
     <div id="countdown" hidden></div>
     <div id="spectate" hidden>
@@ -74,6 +76,11 @@ export function createHud(root, { onRestart, onRecalibrate, onSkip }) {
       if (dots[i] && dots[i]._w !== w) { dots[i]._w = w; dots[i].style.left = w; }
     });
     set('tc', $('turbo-count'), String(car.turbosLeft));
+    // recharge ring: fills over TURBO_RECHARGE seconds while fewer than the maximum are stored
+    const charging = car.turbosLeft < CONFIG.car.TURBO_MAX;
+    const p = charging ? Math.min(1, car.turboRecharge / CONFIG.car.TURBO_RECHARGE) : 0;
+    const pv = p.toFixed(2);
+    if (last.ring !== pv) { last.ring = pv; $('turbo-ring').style.setProperty('--p', pv); $('turbo-ring').style.opacity = charging ? '1' : '0'; }
     const active = car.turboT > 0;
     turbo.classList.toggle('active', active);
     turbo.classList.toggle('empty', car.turbosLeft === 0 && !active);

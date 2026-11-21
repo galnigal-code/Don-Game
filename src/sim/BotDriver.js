@@ -25,8 +25,7 @@ export function createBrain(rng, track) {
     offset: (rng() - 0.5) * 4,                       // personal line, +-2 m
     noisePhase: rng() * Math.PI * 2, noiseFreq: 0.35 + rng() * 0.25,
     skill: 0.975 + rng() * 0.02,                     // 97.5-99.5 % of the player pace (rubber band closes the gap)
-    turboAt: [0.2 * L + (rng() - 0.5) * 300, 0.5 * L + (rng() - 0.5) * 300],
-    turboUsed: 0,
+    nextTurboAt: 0.08 * L + rng() * 250,             // next spot where this bot wants to use a turbo
     startBoost: rng() < 0.4,
     dodge: new Map(),                 // entity id -> will this bot avoid it? (decided once, DODGE_SUCCESS)
     heldItem: null, heldSince: 0, useDelay: 0.4 + rng() * 0.8,
@@ -53,15 +52,20 @@ export function driveBot(car, brain, world) {
 
   driveItems(car, brain, world);
 
-  // turbo: planned spots, or earlier when far behind
-  car.input.turbo = false;
-  if (car.state === 'driving' && brain.turboUsed < C.TURBOS_PER_RACE && car.turbosLeft > 0 && car.turboT <= 0) {
-    const planned = car.s >= brain.turboAt[brain.turboUsed];
-    const behind = car.rank === world.cars.length && car.s > 200 && world.leaderS - car.s > 60;
-    if (planned || behind) { car.input.turbo = true; brain.turboUsed++; }
-  }
+  driveTurbo(car, brain, world);
 }
 
+
+/** Use a turbo when one is charged: at planned spots along the track, or right away when far behind. */
+export function driveTurbo(car, brain, world) {
+  car.input.turbo = false;
+  if (car.state !== 'driving' || car.turbosLeft <= 0 || car.turboT > 0) return;
+  const behind = car.rank === world.cars.length && car.s > 200 && world.leaderS - car.s > 60;
+  if (car.s >= brain.nextTurboAt || behind) {
+    car.input.turbo = true;
+    brain.nextTurboAt = car.s + 200 + world.rng() * 250;
+  }
+}
 
 const HARMFUL = new Set(['mine', 'oil', 'barrel', 'rock']);
 
@@ -117,7 +121,8 @@ export function driveItems(car, brain, world) {
 }
 
 /** A sensible human-like driver for the player (?autopilot=1, balance tests): dodges, grabs boxes, uses items. */
-export function drivePlayerProxy(car, brain, world) {
+export function drivePlayerProxy(car, brain, world, { turbo = true } = {}) {
   driveSimple(car, world.track, avoidAndCollect(car, brain, world, 0));
   driveItems(car, brain, world);
+  if (turbo) driveTurbo(car, brain, world); else car.input.turbo = false;
 }

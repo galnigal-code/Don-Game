@@ -3,7 +3,7 @@ export const CONFIG = {
   sim: { STEP: 1 / 60 },
   car: {
     CRUISE_SPEED: 32, ACCEL: 14, DECEL: 22, TURBO_ACCEL: 30,
-    TURBO_MULT: 1.6, TURBO_TIME: 2.5, TURBOS_PER_RACE: 2,
+    TURBO_MULT: 1.6, TURBO_TIME: 2.5, TURBO_MAX: 2, TURBO_RECHARGE: 7,
     STEER_RATE: 1.6, MAX_YAW: 0.55, YAW_RETURN: 2.0, DRIFT_K: 0.55, STEER_SMOOTH: 12,
     SAND_MULT: 0.6, GRAVITY: 22,
     HIT_SPEED_MULT: { spin: 0.35, launch: 0.1, slip: 0.7, bump: 0.45 },

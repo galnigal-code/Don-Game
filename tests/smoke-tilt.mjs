@@ -122,6 +122,15 @@ await page.waitForTimeout(1500);
 const mir = await page.evaluate(() => __game.world.player.d);
 check(mir > 1.5, `mirrored sensor: tilting right still drives right (d=${mir.toFixed(1)})`);
 
+// turbo recharge ring: one charge back after 7 s of charging
+await page.evaluate(() => { const c = __game.world.player; c.turbosLeft = 1; c.turboRecharge = 3.5; });
+await page.waitForTimeout(400);
+const ring = await page.evaluate(() => { const r = document.getElementById('turbo-ring'); return { p: r.style.getPropertyValue('--p'), o: r.style.opacity }; });
+check(ring.o === '1' && Math.abs(Number(ring.p) - 0.5) < 0.12, `turbo ring shows the recharge progress (${ring.p})`);
+await page.evaluate(() => { const c = __game.world.player; c.turboRecharge = 6.6; });
+await page.waitForTimeout(900);
+check(await page.evaluate(() => __game.world.player.turbosLeft === 2 && document.getElementById('turbo-count').textContent === '2'), 'a turbo charge is added after the recharge time and the counter shows 2');
+
 check(errors.length === 0, 'no console errors' + (errors.length ? ': ' + JSON.stringify(errors) : ''));
 await browser.close();
 if (fails.length) { console.error('\nTILT SMOKE FAILED'); process.exit(1); }

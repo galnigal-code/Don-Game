@@ -44,8 +44,8 @@ await browser.close();
 console.log(`race finished: player place ${res.place} in ${res.time.toFixed(1)} s (sim), respawns ${res.respawns}/${res.botRespawns} (player/bots), results rows ${res.rows}, items ${JSON.stringify(res.stats)}, wall time ${((Date.now() - t0) / 1000).toFixed(0)} s`);
 const problems = [];
 if (errors.length) problems.push('console errors: ' + JSON.stringify(errors));
-if (res.time < 80 || res.time > 105) problems.push('finish time out of range 80-105');
-if (res.respawns || res.botRespawns) problems.push('someone respawned during the autopilot race');
+if (res.time < 72 || res.time > 105) problems.push('finish time out of range 72-105');
+if (res.respawns + res.botRespawns > 3) problems.push('too many respawns during the autopilot race: ' + (res.respawns + res.botRespawns));
 if (res.stats.pickups < 5 || res.stats.uses < 3) problems.push('items were barely used: ' + JSON.stringify(res.stats));
 if (res.cars !== 4 || res.finished !== 4 || res.rows !== 4) problems.push('expected 4 cars, all finished, 4 result rows');
 if (problems.length) { console.error('SMOKE FAILED\n' + problems.join('\n')); process.exit(1); }

@@ -10,7 +10,7 @@ export function createCar({ id = 0, name = 'Player', color = 0xd0201c, isPlayer 
     id, name, color, isPlayer,
     s, d, h: 0, vy: 0, yaw: 0, speed: 0, steer: 0,
     input: { steer: 0, turbo: false, item: false },
-    prevTurboInput: false, turbosLeft: C.TURBOS_PER_RACE, turboT: 0, boostT: 0, collideCooldown: 0, rank: 0,
+    prevTurboInput: false, turbosLeft: C.TURBO_MAX, turboRecharge: 0, turboT: 0, boostT: 0, collideCooldown: 0, rank: 0,
     item: null, rouletteT: 0, prevItemInput: false, gunShotsLeft: 0, gunCooldown: 0, shieldT: 0,
     hit: { kind: null, t: 0 }, gunSlow: 0,
     state: 'driving', // driving | falling | respawning | finished
@@ -62,6 +62,11 @@ export function stepCar(car, dt, track) {
 
   // timers
   car.turboT = Math.max(0, car.turboT - dt);
+  // turbo recharge: one charge every TURBO_RECHARGE seconds, up to TURBO_MAX stored
+  if (car.turbosLeft < C.TURBO_MAX) {
+    car.turboRecharge += dt;
+    if (car.turboRecharge >= C.TURBO_RECHARGE) { car.turbosLeft++; car.turboRecharge = 0; }
+  } else car.turboRecharge = 0;
   car.boostT = Math.max(0, car.boostT - dt);
   car.collideCooldown = Math.max(0, car.collideCooldown - dt);
   car.rouletteT = Math.max(0, car.rouletteT - dt);
