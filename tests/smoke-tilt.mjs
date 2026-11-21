@@ -64,14 +64,14 @@ check(Math.abs(s0) < 0.05, 'calibrated pose (10 deg) is "straight" (steer ~ 0), 
 
 // turn right: rotate to 10 + 20 deg
 await page.evaluate(() => { window.__tiltDeg = 30; __game.world.player.s = 20; __game.world.player.d = 0; });
-await page.waitForTimeout(1500);
+await page.waitForFunction(() => Math.abs(__game.world.player.d) > 4, null, { timeout: 15000 }).catch(() => {});
 const right = await page.evaluate(() => ({ d: __game.world.player.d, steer: __game.world.player.steer }));
 check(right.d > 1.5 && right.steer > 0.3, `tilt right -> car moves right (d=${right.d.toFixed(1)}, steer=${right.steer.toFixed(2)})`);
 if (shots) await page.screenshot({ path: `${shots}/race-right.png` });
 
 // turn left: rotate to 10 - 20 deg
 await page.evaluate(() => { window.__tiltDeg = -10; const c = __game.world.player; c.d = 0; c.yaw = 0; });
-await page.waitForTimeout(1500);
+await page.waitForFunction(() => Math.abs(__game.world.player.d) > 4, null, { timeout: 15000 }).catch(() => {});
 const left = await page.evaluate(() => ({ d: __game.world.player.d, steer: __game.world.player.steer }));
 check(left.d < -1.5 && left.steer < -0.3, `tilt left -> car moves left (d=${left.d.toFixed(1)}, steer=${left.steer.toFixed(2)})`);
 
@@ -83,7 +83,7 @@ await page.waitForTimeout(1200);
 await page.click('#btn-start');
 await page.waitForFunction(() => __game.state === 'racing', null, { timeout: 8000 });
 await page.evaluate(() => { window.__tiltDeg = 30; const c = __game.world.player; c.s = 20; c.d = 0; c.yaw = 0; });
-await page.waitForTimeout(1500);
+await page.waitForFunction(() => Math.abs(__game.world.player.d) > 2, null, { timeout: 15000 }).catch(() => {});
 const inv = await page.evaluate(() => __game.world.player.d);
 check(inv < -1.5, `"invert direction" flips it (tilt right -> d=${inv.toFixed(1)})`);
 
@@ -118,7 +118,7 @@ await page.waitForTimeout(1500);
 await page.click('#btn-start');
 await page.waitForFunction(() => __game.state === 'racing', null, { timeout: 8000 });
 await page.evaluate(() => { window.__tiltDeg = 20; const c = __game.world.player; c.s = 20; c.d = 0; c.yaw = 0; });
-await page.waitForTimeout(1500);
+await page.waitForFunction(() => Math.abs(__game.world.player.d) > 2, null, { timeout: 15000 }).catch(() => {});
 const mir = await page.evaluate(() => __game.world.player.d);
 check(mir > 1.5, `mirrored sensor: tilting right still drives right (d=${mir.toFixed(1)})`);
 
@@ -130,6 +130,19 @@ check(ring.o === '1' && Math.abs(Number(ring.p) - 0.5) < 0.12, `turbo ring shows
 await page.evaluate(() => { const c = __game.world.player; c.turboRecharge = 6.6; });
 await page.waitForTimeout(900);
 check(await page.evaluate(() => __game.world.player.turbosLeft === 2 && document.getElementById('turbo-count').textContent === '2'), 'a turbo charge is added after the recharge time and the counter shows 2');
+
+// sound: unlocked by the play tap, engine and music running, mute button works and is remembered
+check(await page.evaluate(() => __game.sound.ctx && __game.sound.ctx.state === 'running'), 'audio context is running after the play tap');
+check(await page.evaluate(() => __game.sound.musicOn), 'music is playing during the race');
+await page.evaluate(() => { __game.paused = false; });
+await page.waitForTimeout(1200);
+check(await page.evaluate(() => __game.sound.eng.gain.gain.value > 0.01), 'engine sound is audible while driving');
+await page.click('#btn-mute');
+await page.waitForTimeout(400);
+check(await page.evaluate(() => __game.sound.muted && localStorage.getItem('dongame.muted') === '1' && __game.sound.master.gain.value < 0.2), 'mute button silences the master gain and is remembered');
+await page.click('#btn-mute');
+await page.waitForTimeout(400);
+check(await page.evaluate(() => !__game.sound.muted && __game.sound.master.gain.value > 0.5), 'unmute restores the volume');
 
 check(errors.length === 0, 'no console errors' + (errors.length ? ': ' + JSON.stringify(errors) : ''));
 await browser.close();

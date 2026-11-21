@@ -83,13 +83,13 @@ export function buildTrackMesh(track) {
     if (edge === 'sand') {
       S('sand', sd).row(P(sm, sd * hw, -0.02), P(sm, sd * (hw + SE), -0.05));
       S('wood', sd).row(P(sm, sd * (hw + SE), -0.3), P(sm, sd * (hw + SE), 1.2));
-      S('ground', sd).row(P(sm, sd * (hw + SE), -0.2), P(sm, sd * (hw + SE + 90), -0.3));
+      S('ground', sd).row(P(sm, sd * (hw + SE), -0.2), P(sm, sd * (hw + SE + 100), -2.0));   // slopes down to meet the terrain
     } else if (edge === 'wall') {
       S('rock', sd).row(P(sm, sd * hw, -0.3), P(sm, sd * hw, 8));
-      S('rockTop', sd).row(P(sm, sd * hw, 8), P(sm, sd * (hw + 50), 8));
+      S('rockTop', sd).row(P(sm, sd * hw, 8), P(sm, sd * (hw + 100), 6));
     } else { // cliff
       S('cliff', sd).row(P(sm, sd * hw, -0.3), P(sm, sd * hw, -30));
-      S('ground', sd).row(P(sm, sd * hw, -30), P(sm, sd * (hw + 90), -30));
+      S('ground', sd).row(P(sm, sd * hw, -30), P(sm, sd * (hw + 100), -30));
     }
   }
 

@@ -32,8 +32,8 @@ export function createRenderer(canvas) {
   const camera = new THREE.PerspectiveCamera(65, 1, 0.1, 800);
 
   scene.add(new THREE.HemisphereLight(0xcfe6ff, 0xc9a36b, 1.3));
-  const sun = new THREE.DirectionalLight(0xffd9a0, 2.2);
-  sun.position.set(-60, 80, 40);
+  const sun = new THREE.DirectionalLight(0xffc88a, 2.4);
+  sun.position.set(-50, 20, -84);   // low sun ahead-left: long warm light (matches the sun disc in Environment)
   scene.add(sun);
 
   function resize() {

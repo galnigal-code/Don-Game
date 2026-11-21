@@ -6,7 +6,7 @@
 - איפיון טכני: [docs/TECH_SPEC.md](docs/TECH_SPEC.md)
 - משחק (אחרי שלב M0): https://galnigal-code.github.io/Don-Game/
 
-סטטוס: M5 (מסלול מלא: רמפות, ערוצים, מכשולים קבועים) הושלם. הבא: M6 (גרפיקה וסאונד). הבנייה ממשיכה לפי [TECH_SPEC §17](docs/TECH_SPEC.md).
+סטטוס: M6 (גרפיקה וסאונד) הושלם. הבא: M7 (ביצועים וליטוש בטלפון). הבנייה ממשיכה לפי [TECH_SPEC §17](docs/TECH_SPEC.md).
 
 ## פיתוח
 

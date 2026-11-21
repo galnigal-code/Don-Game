@@ -23,6 +23,7 @@ export function createHud(root, { onRestart, onRecalibrate, onSkip }) {
       <button id="btn-skip">דלג לתוצאות</button>
       <div id="spectate-hint">נגיעה במסך מחליפה מכונית</div>
     </div>
+    <div id="boost-fx"></div>
     <div id="fade"></div>
     <div id="result" hidden>
       <div class="card">
@@ -83,6 +84,8 @@ export function createHud(root, { onRestart, onRecalibrate, onSkip }) {
     if (last.ring !== pv) { last.ring = pv; $('turbo-ring').style.setProperty('--p', pv); $('turbo-ring').style.opacity = charging ? '1' : '0'; }
     const active = car.turboT > 0;
     turbo.classList.toggle('active', active);
+    const boosting = active || car.boostT > 0;
+    if (last.bx !== boosting) { last.bx = boosting; $('boost-fx').classList.toggle('on', boosting); }
     turbo.classList.toggle('empty', car.turbosLeft === 0 && !active);
     // item button: roulette while rolling, then the item
     let icon = '🎁', usable = false, rolling = false;
