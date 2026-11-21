@@ -67,9 +67,9 @@ class Strip {
 export function buildTrackMesh(track) {
   const group = new THREE.Group();
   const SE = CONFIG.track.SAND_EXTRA;
-  const mat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.95, metalness: 0, side: THREE.DoubleSide, ...extra });
+  const mat = (color, extra = {}) => new THREE.MeshLambertMaterial({ color, side: THREE.DoubleSide, ...extra });   // no specular needed: much cheaper than Standard on phones
   const materials = {
-    road: mat(0xffffff, { map: roadTexture(), roughness: 0.85 }),
+    road: mat(0xffffff, { map: roadTexture() }),
     sand: mat(0xd9b27a), ground: mat(0xc99458), wood: mat(0x8a5a30),
     rock: mat(0xa04a2a), rockTop: mat(0xb8643a), cliff: mat(0x8f4426),
   };
@@ -141,8 +141,8 @@ export function buildTrackMesh(track) {
   line(track.finishS);
 
   // ramps (a wedge the car drives up) and the trench under every gap
-  const rampMat = new THREE.MeshStandardMaterial({ map: rampTexture(), roughness: 0.7, side: THREE.DoubleSide });
-  const trenchMat = new THREE.MeshStandardMaterial({ color: 0x5c2a16, roughness: 1, side: THREE.BackSide });
+  const rampMat = new THREE.MeshLambertMaterial({ map: rampTexture(), side: THREE.DoubleSide });
+  const trenchMat = new THREE.MeshLambertMaterial({ color: 0x5c2a16, side: THREE.BackSide });
   for (const r of track.ramps) {
     const a = track.sample(r.s - r.len), b = track.sample(r.s), hw = a.halfWidth;
     const pts = [

@@ -68,7 +68,7 @@ export function createHud(root, { onRestart, onRecalibrate, onSkip }) {
   };
 
   hud.update = ({ car, cars, length }) => {
-    $('hud-speed').firstElementChild.textContent = Math.round(car.speed * 3.6);
+    set('spd', $('hud-speed').firstElementChild, String(Math.round(car.speed * 3.6)));
     const posEl = $('hud-pos');
     set('pos', posEl.querySelector('b'), String(car.finishTime != null ? car.place : car.rank));
     set('of', posEl.querySelector('.of'), '/' + cars.length);

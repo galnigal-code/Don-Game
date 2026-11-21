@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 // Simple low-poly sports car (nose points to -Z). Replaced by a nicer model in M6.
 function nameLabel(name, color) {
@@ -38,53 +39,82 @@ function blobTexture() {
   return blobTex;
 }
 
+const IDENT = new THREE.Matrix4();
+const _q = new THREE.Quaternion(), _e = new THREE.Euler(), _p = new THREE.Vector3(), _s = new THREE.Vector3(1, 1, 1), _m = new THREE.Matrix4();
+
+/** Bake a transform (and an optional vertex colour) into a geometry so many parts can be merged into one mesh. */
+function bake(geo, { color = null, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0 } = {}) {
+  const g = geo.index ? geo.toNonIndexed() : geo.clone();
+  _m.compose(_p.set(x, y, z), _q.setFromEuler(_e.set(rx, ry, rz)), _s);
+  g.applyMatrix4(_m);
+  if (color !== null) {
+    const c = new THREE.Color(color), n = g.attributes.position.count, arr = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) { arr[i * 3] = c.r; arr[i * 3 + 1] = c.g; arr[i * 3 + 2] = c.b; }
+    g.setAttribute('color', new THREE.BufferAttribute(arr, 3));
+  }
+  return g;
+}
+const merged = (list) => (list.length ? mergeGeometries(list) : null);
+
+// Shared materials (one set for all cars; only the paint differs per car)
+const PARTS_MAT = new THREE.MeshStandardMaterial({ vertexColors: true, metalness: 0.1, roughness: 0.45 });
+const LAMP_MAT = new THREE.MeshBasicMaterial({ vertexColors: true, toneMapped: false });
+const FLAME_GEO = new THREE.ConeGeometry(0.17, 1.4, 8);
+
+/**
+ * The car is built from only a handful of meshes (paint, parts, lamps, 4 wheels) because every mesh is a draw call and
+ * four cars are on screen: ~40 loose parts per car cost 160+ draw calls, which is too much for a phone.
+ */
 export function createCarModel(color, name = null) {
   const root = new THREE.Group();       // positioned/oriented by the game
   const body = new THREE.Group();       // tilts (roll/pitch/spin) on top of root
   root.add(body);
 
-  const paint = new THREE.MeshStandardMaterial({ color, metalness: 0.1, roughness: 0.35 });
-  const dark = new THREE.MeshStandardMaterial({ color: 0x15161a, metalness: 0.1, roughness: 0.55 });
-  const glass = new THREE.MeshStandardMaterial({ color: 0x27323f, metalness: 0.2, roughness: 0.12 });
-  const tire = new THREE.MeshStandardMaterial({ color: 0x181818, roughness: 0.95 });
-  const rim = new THREE.MeshStandardMaterial({ color: 0xd5d8de, metalness: 0.4, roughness: 0.3 });
-  const white = new THREE.MeshStandardMaterial({ color: 0xf4f1ea, roughness: 0.4 });
-  const lamp = new THREE.MeshStandardMaterial({ color: 0xfff2c0, emissive: 0xffe8a0, emissiveIntensity: 1.3 });
-  const tail = new THREE.MeshStandardMaterial({ color: 0xff2a2a, emissive: 0xff1c1c, emissiveIntensity: 1.1 });
-  const add = (geo, m, x, y, z, parent = body) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); parent.add(o); return o; };
+  const GLASS = 0x27323f, DARK = 0x15161a, WHITE = 0xf4f1ea, RIM = 0xd5d8de, TIRE = 0x181818;
+  const paint = [], parts = [], lamps = [];
+  const box = (w, h, d) => new THREE.BoxGeometry(w, h, d);
 
   // lower body: low wedge with a sloping nose and a raised tail
-  add(profileGeometry([[-2.15, 0.3], [-2.15, 0.82], [-1.5, 0.9], [-0.2, 0.84], [1.2, 0.74], [1.95, 0.5], [2.2, 0.38], [2.15, 0.3]], 1.9), paint, 0, 0, 0);
+  paint.push(bake(profileGeometry([[-2.15, 0.3], [-2.15, 0.82], [-1.5, 0.9], [-0.2, 0.84], [1.2, 0.74], [1.95, 0.5], [2.2, 0.38], [2.15, 0.3]], 1.9)));
   // cabin: glass greenhouse with a body-coloured roof
-  add(profileGeometry([[-1.15, 0.82], [-0.75, 1.3], [0.35, 1.32], [1.0, 0.84]], 1.46, 0.05), glass, 0, 0, 0);
-  add(profileGeometry([[-0.78, 1.3], [-0.7, 1.36], [0.3, 1.38], [0.36, 1.31]], 1.4, 0.03), paint, 0, 0, 0);
+  parts.push(bake(profileGeometry([[-1.15, 0.82], [-0.75, 1.3], [0.35, 1.32], [1.0, 0.84]], 1.46, 0.05), { color: GLASS }));
+  paint.push(bake(profileGeometry([[-0.78, 1.3], [-0.7, 1.36], [0.3, 1.38], [0.36, 1.31]], 1.4, 0.03)));
   // racing stripes
-  for (const x of [-0.17, 0.17]) add(new THREE.BoxGeometry(0.13, 0.03, 3.0), white, x, 0.86, -0.4).rotation.x = 0.045;
+  for (const x of [-0.17, 0.17]) parts.push(bake(box(0.13, 0.03, 3.0), { color: WHITE, x, y: 0.86, z: -0.4, rx: 0.045 }));
   // wheel arches (dark discs hint at the cut-outs)
-  for (const [x, z] of [[-0.97, -1.38], [0.97, -1.38], [-0.97, 1.4], [0.97, 1.4]]) {
-    const arch = add(new THREE.CylinderGeometry(0.55, 0.55, 0.06, 14), dark, x * 1.0, 0.45, z); arch.rotation.z = Math.PI / 2;
-  }
-  // rear wing, front splitter, lights, mirrors, exhausts
-  add(new THREE.BoxGeometry(2.0, 0.07, 0.55), dark, 0, 1.15, 1.95);
-  for (const x of [-0.75, 0.75]) add(new THREE.BoxGeometry(0.08, 0.38, 0.4), dark, x, 0.95, 1.95);
-  for (const x of [-1.0, 1.0]) add(new THREE.BoxGeometry(0.06, 0.28, 0.6), paint, x, 1.18, 1.95);
-  add(new THREE.BoxGeometry(2.05, 0.1, 0.55), dark, 0, 0.3, -2.1);
-  for (const x of [-0.62, 0.62]) add(new THREE.BoxGeometry(0.42, 0.13, 0.1), lamp, x, 0.62, -2.18);
-  add(new THREE.BoxGeometry(1.5, 0.1, 0.08), tail, 0, 0.74, 2.17);
-  for (const x of [-0.98, 0.98]) add(new THREE.BoxGeometry(0.2, 0.12, 0.2), paint, x, 1.0, -0.55);
+  for (const [x, z] of [[-0.97, -1.38], [0.97, -1.38], [-0.97, 1.4], [0.97, 1.4]]) parts.push(bake(new THREE.CylinderGeometry(0.55, 0.55, 0.06, 14), { color: DARK, x, y: 0.45, z, rz: Math.PI / 2 }));
+  // rear wing, front splitter, mirrors, exhaust tips
+  parts.push(bake(box(2.0, 0.07, 0.55), { color: DARK, y: 1.15, z: 1.95 }));
+  for (const x of [-0.75, 0.75]) parts.push(bake(box(0.08, 0.38, 0.4), { color: DARK, x, y: 0.95, z: 1.95 }));
+  for (const x of [-1.0, 1.0]) paint.push(bake(box(0.06, 0.28, 0.6), { x, y: 1.18, z: 1.95 }));
+  parts.push(bake(box(2.05, 0.1, 0.55), { color: DARK, y: 0.3, z: -2.1 }));
+  for (const x of [-0.98, 0.98]) paint.push(bake(box(0.2, 0.12, 0.2), { x, y: 1.0, z: -0.55 }));
+  for (const x of [-0.45, 0.45]) parts.push(bake(new THREE.CylinderGeometry(0.1, 0.12, 0.3, 8), { color: RIM, x, y: 0.42, z: 2.2, rx: Math.PI / 2 }));
+  // lights (unlit, always bright)
+  for (const x of [-0.62, 0.62]) lamps.push(bake(box(0.42, 0.13, 0.1), { color: 0xfff2c0, x, y: 0.62, z: -2.18 }));
+  lamps.push(bake(box(1.5, 0.1, 0.08), { color: 0xff3030, y: 0.74, z: 2.17 }));
+
+  const paintMesh = new THREE.Mesh(merged(paint), new THREE.MeshStandardMaterial({ color, metalness: 0.1, roughness: 0.35 }));
+  body.add(paintMesh, new THREE.Mesh(merged(parts), PARTS_MAT), new THREE.Mesh(merged(lamps), LAMP_MAT));
+
+  // turbo flames (toggled by the game)
+  const flameMat = new THREE.MeshBasicMaterial({ color: 0xffa31a, transparent: true, opacity: 0.9, toneMapped: false });
   const flames = [];
   for (const x of [-0.45, 0.45]) {
-    add(new THREE.CylinderGeometry(0.1, 0.12, 0.3, 8), rim, x, 0.42, 2.2).rotation.x = Math.PI / 2;
-    const f = add(new THREE.ConeGeometry(0.17, 1.4, 8), new THREE.MeshBasicMaterial({ color: 0xffa31a, transparent: true, opacity: 0.9, toneMapped: false }), x, 0.42, 2.95);
-    f.rotation.x = Math.PI / 2; f.visible = false; flames.push(f);
+    const f = new THREE.Mesh(FLAME_GEO, flameMat);
+    f.position.set(x, 0.42, 2.95); f.rotation.x = Math.PI / 2; f.visible = false; body.add(f); flames.push(f);
   }
 
+  // wheels: tyre + rim + spokes merged into one mesh per wheel (they spin)
+  const wheelGeo = merged([
+    bake(new THREE.CylinderGeometry(0.42, 0.42, 0.4, 16), { color: TIRE, rz: Math.PI / 2 }),
+    bake(new THREE.CylinderGeometry(0.27, 0.27, 0.42, 10), { color: RIM, rz: Math.PI / 2 }),
+    bake(box(0.44, 0.07, 0.5), { color: DARK }),
+  ]);
   const wheels = [];
   for (const [x, z] of [[-1.0, -1.38], [1.0, -1.38], [-1.0, 1.4], [1.0, 1.4]]) {
     const w = new THREE.Group(); w.position.set(x, 0.42, z);
-    const t = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.4, 16), tire); t.rotation.z = Math.PI / 2; w.add(t);
-    const r = new THREE.Mesh(new THREE.CylinderGeometry(0.27, 0.27, 0.42, 10), rim); r.rotation.z = Math.PI / 2; w.add(r);
-    const hub = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.07, 0.5), dark); w.add(hub);   // spokes: shows the spin
+    w.add(new THREE.Mesh(wheelGeo, PARTS_MAT));
     root.add(w); wheels.push(w);
   }
 
@@ -99,5 +129,6 @@ export function createCarModel(color, name = null) {
 
   const label = name ? nameLabel(name, color) : null;
   if (label) root.add(label);
+  void IDENT;
   return { root, body, wheels, label, shield, flames, blob: blobHolder };
 }

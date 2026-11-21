@@ -6,7 +6,7 @@
 - איפיון טכני: [docs/TECH_SPEC.md](docs/TECH_SPEC.md)
 - משחק (אחרי שלב M0): https://galnigal-code.github.io/Don-Game/
 
-סטטוס: M6 (גרפיקה וסאונד) הושלם, כיול הגה מונחה נוסף. הבא: M7 (ביצועים וליטוש בטלפון). הבנייה ממשיכה לפי [TECH_SPEC §17](docs/TECH_SPEC.md).
+סטטוס: כל שלבי הבנייה (M0-M7) הושלמו. ראה [docs/STATUS.md](docs/STATUS.md). הבנייה ממשיכה לפי [TECH_SPEC §17](docs/TECH_SPEC.md).
 
 ## פיתוח
 
@@ -17,6 +17,7 @@ npm test         # בדיקות יחידה
 npm run build    # בנייה ל-dist
 npm run smoke    # בדיקת עשן ב-Chromium (אחרי build + preview)
 npm run smoke:tilt  # בדיקת ממשק מלאה עם טלפון מדומה
+npm run smoke:perf  # תקציבי ביצועים (קריאות ציור, משולשים, CPU, איכות אדפטיבית)
 npm run test:direction  # חוזה הכיוון: יחידה + חיישנים וירטואליים בדפדפן אמיתי (דורש build + preview)
 ```
 

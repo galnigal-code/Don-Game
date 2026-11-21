@@ -13,7 +13,7 @@ export function createDebugOverlay(root, renderer, tilt) {
       lastText = now;
       const c = game.world.player;
       el.textContent =
-        `FPS ${fps.toFixed(0)}  calls ${renderer.info.render.calls}  tris ${renderer.info.render.triangles}\n` +
+        `FPS ${fps.toFixed(0)}  calls ${renderer.info.render.calls}  tris ${renderer.info.render.triangles}  Q${game.qLevel}${game.qualityPinned ? '(pinned)' : ''} dpr ${renderer.getPixelRatio().toFixed(2)}  sim ${game.simMs.toFixed(1)}ms js ${game.cpuMs.toFixed(1)}ms gl ${game.submitMs.toFixed(1)}ms\n` +
         `s ${c.s.toFixed(0)}  d ${c.d.toFixed(1)}  v ${c.speed.toFixed(1)}  yaw ${c.yaw.toFixed(2)}  steer ${c.steer.toFixed(2)}\n` +
         `state ${c.state}  turbo ${c.turbosLeft}  respawns ${c.respawns}\n` +
         `tilt ${tilt.active ? 'ON' : 'off'}  ax ${tilt.raw.x.toFixed(1)} ay ${tilt.raw.y.toFixed(1)} angle ${tilt.raw.angle}  ` +

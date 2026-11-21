@@ -21,7 +21,9 @@ function skyTexture() {
 
 export function createRenderer(canvas) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: window.devicePixelRatio < 2, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, CONFIG.render.MAX_PIXEL_RATIO));
+  let ratioCap = CONFIG.render.MAX_PIXEL_RATIO;
+  const applyRatio = () => renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, ratioCap));
+  applyRatio();
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.1;
@@ -30,7 +32,7 @@ export function createRenderer(canvas) {
   scene.background = skyTexture();
   scene.fog = new THREE.Fog(HORIZON, CONFIG.render.FOG_NEAR, CONFIG.render.FOG_FAR);
 
-  const camera = new THREE.PerspectiveCamera(65, 1, 0.1, 800);
+  const camera = new THREE.PerspectiveCamera(65, 1, 0.1, CONFIG.render.FOG_FAR + 120);
 
   scene.add(new THREE.HemisphereLight(0xcfe6ff, 0xc9a36b, 1.3));
   const sun = new THREE.DirectionalLight(0xffc88a, 2.4);
@@ -48,5 +50,7 @@ export function createRenderer(canvas) {
   window.addEventListener('resize', resize);
   resize();
 
-  return { renderer, scene, camera, sun, resize };
+  /** Quality control: change the render resolution without touching anything else. */
+  const setRatioCap = (cap) => { ratioCap = cap; applyRatio(); resize(); };
+  return { renderer, scene, camera, sun, resize, setRatioCap };
 }

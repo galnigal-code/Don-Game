@@ -63,7 +63,7 @@ export function buildEnvironment(track, scene) {
   tg.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   tg.setAttribute('color', new THREE.BufferAttribute(col, 3));
   tg.setIndex(idx); tg.computeVertexNormals();
-  group.add(new THREE.Mesh(tg, new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 1, side: THREE.DoubleSide })));
+  group.add(new THREE.Mesh(tg, new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, side: THREE.DoubleSide })));
 
   /* ---- decorations on the shoulders: cacti and rock clusters ---- */
   const dummy = new THREE.Object3D();
@@ -80,7 +80,7 @@ export function buildEnvironment(track, scene) {
     }
   };
 
-  const cacti = new THREE.InstancedMesh(cactusGeometry(), new THREE.MeshStandardMaterial({ color: 0x3f7d3a, roughness: 0.9, flatShading: true }), 150);
+  const cacti = new THREE.InstancedMesh(cactusGeometry(), new THREE.MeshLambertMaterial({ color: 0x3f7d3a, flatShading: true }), 150);
   let ci = 0;
   placeAlong(150, 4, 85, (x, y, z) => {
     const s = 0.7 + rng() * 0.9;
@@ -89,7 +89,7 @@ export function buildEnvironment(track, scene) {
   });
   cacti.count = ci; group.add(cacti);
 
-  const rocks = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(1, 0), new THREE.MeshStandardMaterial({ roughness: 1, flatShading: true }), 220);
+  const rocks = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(1, 0), new THREE.MeshLambertMaterial({ flatShading: true }), 220);
   let ri = 0;
   const rockCol = [0x93502d, 0xa8643a, 0x7d4326, 0xb67a4a];
   placeAlong(70, 3, 95, (x, y, z) => {
@@ -113,6 +113,8 @@ export function buildEnvironment(track, scene) {
   return {
     group, terrain, sunDir,
     update(camera) { sun.position.copy(camera.position).addScaledVector(sunDir, 700); },
+    /** Fraction (0..1) of cacti and rocks to draw (quality control). */
+    setDetail(f) { cacti.count = Math.floor(ci * f); rocks.count = Math.floor(ri * f); },
     stats: { terrainTris: idx.length / 3, cacti: ci, rocks: ri },
   };
 }

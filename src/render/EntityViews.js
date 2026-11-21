@@ -75,25 +75,28 @@ function makeBullet() {
 }
 const MAKERS = { mine: makeMine, rock: makeRock, oil: makeOil, barrel: makeBarrel, missile: makeMissile, bullet: makeBullet };
 
+function T_place(v, s, d, h) { v.track.toWorld(s, d, h, v.tmp); }
+
 export class EntityViews {
   constructor(scene, track) {
     this.scene = scene; this.track = track;
     this.group = new THREE.Group(); scene.add(this.group);
     this.boxGeo = new THREE.BoxGeometry(1.5, 1.5, 1.5);
     this.boxMat = new THREE.MeshStandardMaterial({ map: boxTexture(), emissive: 0x442266, emissiveIntensity: 0.6, roughness: 0.4 });
-    this.boxes = []; this.meshes = new Map();
+    this.boxes = []; this.meshes = new Map(); this.boxMesh = null;
+    this.dummy = new THREE.Object3D();
     this.tmp = {}; this.smp = {};
   }
 
   setWorld(world) {
-    for (const b of this.boxes) this.group.remove(b.mesh);
+    if (this.boxMesh) { this.group.remove(this.boxMesh); this.boxMesh.dispose?.(); }
     for (const m of this.meshes.values()) this.group.remove(m);
-    this.boxes = []; this.meshes.clear();
-    for (const box of world.boxes) {
-      const mesh = new THREE.Mesh(this.boxGeo, this.boxMat);
-      this.group.add(mesh);
-      this.boxes.push({ box, mesh });
-    }
+    this.meshes.clear();
+    // all item boxes are ONE instanced mesh: one draw call instead of 24
+    this.boxes = world.boxes;
+    this.boxMesh = new THREE.InstancedMesh(this.boxGeo, this.boxMat, Math.max(1, world.boxes.length));
+    this.boxMesh.frustumCulled = false;
+    this.group.add(this.boxMesh);
   }
 
   place(obj, s, d, h, withPitch = true) {
@@ -105,13 +108,16 @@ export class EntityViews {
   }
 
   update(time, world) {
-    for (const { box, mesh } of this.boxes) {
-      mesh.visible = box.t <= 0;
-      if (!mesh.visible) continue;
-      this.place(mesh, box.s, box.d, 1.3 + Math.sin(time * 2.2 + box.id) * 0.18, false);
-      mesh.rotation.y = time * 1.6 + box.id;
-      mesh.rotation.x = 0.35;
-    }
+    const d = this.dummy;
+    this.boxes.forEach((box, i) => {
+      if (box.t > 0) { d.position.set(0, -1000, 0); d.scale.setScalar(0.0001); d.rotation.set(0, 0, 0); }
+      else {
+        T_place(this, box.s, box.d, 1.3 + Math.sin(time * 2.2 + box.id) * 0.18);
+        d.position.set(this.tmp.x, this.tmp.y, this.tmp.z); d.scale.setScalar(1); d.rotation.set(0.35, time * 1.6 + box.id, 0);
+      }
+      d.updateMatrix(); this.boxMesh.setMatrixAt(i, d.matrix);
+    });
+    this.boxMesh.instanceMatrix.needsUpdate = true;
     const seen = new Set();
     for (const e of world.entities) {
       if (!e.alive) continue;

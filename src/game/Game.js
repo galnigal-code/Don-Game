@@ -12,6 +12,7 @@ import { EntityViews } from '../render/EntityViews.js';
 import { Effects } from '../render/Effects.js';
 import { Particles } from '../render/Particles.js';
 import { buildEnvironment } from '../render/Environment.js';
+import { QualityController, LEVELS, initialLevel } from '../render/quality.js';
 import { KeyboardInput } from '../input/KeyboardInput.js';
 import { TouchSteerTemp } from '../input/TouchSteerTemp.js';
 import { TiltInput } from '../input/TiltInput.js';
@@ -36,10 +37,11 @@ export class Game {
     this.fixedSeed = params.has('seed') ? Number(params.get('seed')) : null;
 
     const r = createRenderer(canvas);
-    this.renderer = r.renderer; this.scene = r.scene; this.camera = r.camera;
+    this.renderer = r.renderer; this.scene = r.scene; this.camera = r.camera; this.setRatioCap = r.setRatioCap;
     this.track = createTrack();
     this.scene.add(buildTrackMesh(this.track));
     this.env = buildEnvironment(this.track, this.scene);
+    this.setupQuality(params);
     this.rig = new CameraRig(this.camera);
     this.entityViews = new EntityViews(this.scene, this.track);
     this.effects = new Effects(this.scene);
@@ -95,6 +97,29 @@ export class Game {
       if (!document.hidden && this.state !== 'menu' && this.state !== 'calibrate') this.keepAwake();
     });
     this.frame = this.frame.bind(this);
+  }
+
+  /* ---------- quality ---------- */
+
+  /** ?quality=0..3 pins a level; otherwise it adapts to the frame rate. The last level is remembered for the next visit. */
+  setupQuality(params) {
+    const q = params.get('quality');
+    const pinned = q !== null && q !== 'auto' && !Number.isNaN(Number(q)) ? Math.max(0, Math.min(3, Number(q))) : null;
+    let start = initialLevel({ cores: navigator.hardwareConcurrency || 8, memory: navigator.deviceMemory || 8 });
+    try { const saved = Number(localStorage.getItem('dongame.quality')); if (!Number.isNaN(saved) && localStorage.getItem('dongame.quality') !== null) start = Math.min(start, Math.max(0, Math.min(3, saved))); } catch { /* ignore */ }
+    if (pinned !== null) start = pinned;
+    this.quality = new QualityController({ start });
+    this.qualityPinned = pinned !== null;
+    this.cpuMs = 0; this.submitMs = 0; this.simMs = 0;
+    this.applyQuality(this.quality.level);
+  }
+
+  applyQuality(level) {
+    const L = LEVELS[level];
+    this.qLevel = level; this.qCfg = L;
+    this.setRatioCap(L.pixelRatio);
+    this.env.setDetail(L.decor);
+    try { localStorage.setItem('dongame.quality', String(level)); } catch { /* ignore */ }
   }
 
   /* ---------- version ---------- */
@@ -197,8 +222,12 @@ export class Game {
     this.last = now;
     if (!this.paused) {
       if (this.state === 'countdown') this.updateCountdown(dt);
-      if (this.state === 'racing' || this.state === 'spectate') this.runSim(dt);
+      if (this.state === 'racing' || this.state === 'spectate') { const ts = performance.now(); this.runSim(dt); this.simMs += (performance.now() - ts - this.simMs) * 0.05; }
       if (this.goTextT > 0) { this.goTextT -= dt; if (this.goTextT <= 0) this.hud.hideCountdown(); }
+    }
+    if (!this.paused && !this.qualityPinned) {
+      const changed = this.quality.frame(dt);
+      if (changed !== null) this.applyQuality(changed);
     }
     this.screens.update();
     this.render(dt);
@@ -315,7 +344,7 @@ export class Game {
     v.root.updateMatrixWorld(true);
     const heading = this.carWorld[this.world.cars.indexOf(car)]?.heading ?? 0;
     const bx = Math.sin(heading), bz = -Math.cos(heading);            // car forward
-    const rate = (car.offroad ? 70 : 22) * Math.min(1, car.speed / 25) * (turbo ? 1.6 : 1);
+    const rate = (car.offroad ? 70 : 22) * Math.min(1, car.speed / 25) * (turbo ? 1.6 : 1) * this.qCfg.particles;
     let acc = (this.emitAcc.get(car) || 0) + rate * dt;
     while (acc >= 1) {
       acc -= 1;
@@ -397,16 +426,17 @@ export class Game {
       const groundY = this.tmpWorld.y - car.h + gh;
       v.blob.position.set(this.tmpWorld.x, groundY + 0.05, this.tmpWorld.z);
       v.blob.rotation.set(Math.atan2(sm.ty, Math.hypot(sm.tx, sm.tz)), -heading, 0, 'YXZ');
-      v.blob.visible = visible && car.state !== 'falling';
+      v.blob.visible = this.qCfg.blobs && visible && car.state !== 'falling';
       v.blob.scale.setScalar(Math.max(0.5, 1 - Math.max(0, car.h - gh) * 0.12));
       if (dt > 0) this.emitCarParticles(car, v, dt, sm.curvature);
-      if (v.label) v.label.visible = this.camera.position.distanceToSquared(v.root.position) < 55 * 55;   // far labels only clutter
+      if (v.label) v.label.visible = this.qCfg.labels && this.camera.position.distanceToSquared(v.root.position) < 55 * 55;   // far labels only clutter
       const cw = (this.carWorld[i] ||= {});
       cw.x = this.tmpWorld.x; cw.y = this.tmpWorld.y; cw.z = this.tmpWorld.z; cw.heading = heading;
     });
   }
 
   render(dt) {
+    const t0 = performance.now();
     const w = this.world, player = w.player;
     this.updateViews(dt);
 
@@ -428,6 +458,10 @@ export class Game {
     this.hud.update({ car: player, cars: w.cars, length: this.track.finishS });
     if (this.state === 'spectate') this.hud.updateStandings(w.ranked, this.specId);
     this.env.update(this.camera);
+    const t1 = performance.now();
     this.renderer.render(this.scene, this.camera);
+    const t2 = performance.now();
+    this.cpuMs += (t1 - t0 - this.cpuMs) * 0.05;           // JS work per frame (everything except issuing the draw calls)
+    this.submitMs += (t2 - t1 - this.submitMs) * 0.05;     // time to issue the draw calls (CPU side)
   }
 }
