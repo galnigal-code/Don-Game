@@ -22,7 +22,7 @@ await page.addInitScript(() => {
   setInterval(() => {
     const p = window.__tiltDeg * Math.PI / 180, G = 9.81;
     window.dispatchEvent(new DeviceMotionEvent('devicemotion', {
-      accelerationIncludingGravity: { x: -Math.sin(p) * G, y: Math.cos(p) * G, z: 0 },
+      accelerationIncludingGravity: { x: (window.__mirrorX ? -1 : 1) * -Math.sin(p) * G, y: Math.cos(p) * G, z: 0 },
     }));
   }, 16);
 });
@@ -105,6 +105,22 @@ await page.waitForTimeout(250);
 check(await page.evaluate(() => __game.world.player.rouletteT > 0 && document.getElementById('btn-item').classList.contains('rolling')), 'picking up a box starts the roulette on the button');
 await page.waitForTimeout(1200);
 check(await page.evaluate(() => __game.world.player.item !== null && document.getElementById('btn-item').classList.contains('ready')), 'after the roulette the item is ready');
+
+// a phone whose x axis is mirrored: the calibration screen learns the direction from "tilt right"
+await page.evaluate(() => { window.__mirrorX = true; window.__tiltDeg = 0; __game.toCalibrate(); });
+await page.waitForTimeout(1500);
+await page.evaluate(() => { window.__tiltDeg = 20; });
+await page.waitForTimeout(900);
+check(await page.evaluate(() => __game.tilt.dirLearned && __game.tilt.invert === true), 'mirrored sensor: direction learned from the "tilt right" gesture (invert = true)');
+check(/הכיוון זוהה/.test(await page.textContent('#calib-status')), 'calibration screen confirms the direction');
+await page.evaluate(() => { window.__tiltDeg = 0; });
+await page.waitForTimeout(1500);
+await page.click('#btn-start');
+await page.waitForFunction(() => __game.state === 'racing', null, { timeout: 8000 });
+await page.evaluate(() => { window.__tiltDeg = 20; const c = __game.world.player; c.s = 20; c.d = 0; c.yaw = 0; });
+await page.waitForTimeout(1500);
+const mir = await page.evaluate(() => __game.world.player.d);
+check(mir > 1.5, `mirrored sensor: tilting right still drives right (d=${mir.toFixed(1)})`);
 
 check(errors.length === 0, 'no console errors' + (errors.length ? ': ' + JSON.stringify(errors) : ''));
 await browser.close();

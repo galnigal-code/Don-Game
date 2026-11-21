@@ -19,6 +19,7 @@ export class TiltInput {
     this.neutral = null; this.stableRef = 0; this.stableSince = 0;
     this.raw = { x: 0, y: 0, angle: 0, planar: 0 };
     this.started = false;
+    this.dirTest = false; this.dirLearned = false; this.dirRef = 0;
     this.onMotion = this.onMotion.bind(this);
     this.load();
   }
@@ -54,7 +55,7 @@ export class TiltInput {
   onMotion(e) {
     const a = e.accelerationIncludingGravity;
     if (!a || a.x == null || a.y == null) return;
-    const angle = screen.orientation?.angle ?? window.orientation ?? 0;
+    const angle = globalThis.screen?.orientation?.angle ?? globalThis.window?.orientation ?? 0;
     const r = rollFromMotion(a, angle, this.isIOS);
     this.raw = { x: a.x, y: a.y, angle, planar: r.planar };
     if (r.planar < CONFIG.tilt.PLANAR_MIN) return;   // phone is lying flat: wheel angle is undefined
@@ -89,6 +90,27 @@ export class TiltInput {
   /** Steering relative to the held-still pose; used by the calibration screen preview. */
   get previewSteer() { return this.active ? steerFromRoll(this.roll, this.neutral ?? this.zero, this.options) : 0; }
   get previewDeg() { return this.active ? wrapPi(this.roll - (this.neutral ?? this.zero)) / DEG * (this.invert ? -1 : 1) : 0; }
+
+  /**
+   * Direction test: the player is told to tilt RIGHT (like turning a wheel clockwise). Whatever sign the
+   * sensor reports for that physical motion defines "right" on this device. Independent of platform and
+   * screen orientation conventions.
+   */
+  beginDirectionTest() {
+    this.dirTest = true; this.dirLearned = false;
+    this.dirRef = this.neutral ?? this.roll;
+  }
+  updateDirectionTest() {
+    if (!this.dirTest || !this.active) return;
+    if (this.neutral != null && Math.abs(wrapPi(this.roll - this.dirRef)) < 2 * DEG) this.dirRef = this.neutral;
+    const exc = wrapPi(this.roll - this.dirRef);
+    if (Math.abs(exc) < CONFIG.tilt.DIRECTION_TEST_DEG * DEG) return;
+    this.invert = exc < 0;           // tilted "right" but the sensor says negative -> flip
+    this.dirTest = false; this.dirLearned = true;
+    this.save();
+  }
+  /** Manual override from the "flip direction" button: stops the automatic test. */
+  flipDirection() { this.invert = !this.invert; this.dirTest = false; this.dirLearned = false; this.save(); }
 
   calibrate() {
     if (this.hasSample) this.zero = this.neutral ?? this.roll;

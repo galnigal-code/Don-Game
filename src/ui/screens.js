@@ -14,7 +14,7 @@ export function createScreens(root, tilt, { onPlay, onStart }) {
     <div class="screen" id="scr-calib" hidden>
       <div class="panel">
         <div class="title">כיול הגה</div>
-        <p>החזק את הטלפון יציב בתנוחה נוחה, כמו הגה, ולחץ "התחל". סובב ימינה ושמאלה כדי לבדוק את הכיוון.</p>
+        <p>החזק את הטלפון יציב בתנוחה נוחה, כמו הגה.<br><b>עכשיו הטה אותו ימינה</b>, כמו שמסובבים הגה ימינה (הצד הימני של הטלפון יורד), והמשחק ילמד את הכיוון. אחר כך לחץ "התחל".</p>
         <div class="gauge" dir="ltr">
           <span id="lbl-left">◀ שמאלה</span>
           <div class="gtrack"><div class="gmid"></div><div class="gdot" id="gdot"></div></div>
@@ -26,7 +26,7 @@ export function createScreens(root, tilt, { onPlay, onStart }) {
             <button data-v="low">נמוכה</button><button data-v="normal">רגילה</button><button data-v="high">גבוהה</button>
           </div>
         </div>
-        <button class="ghost" id="btn-invert">↔ הפוך כיוון (אם ההיגוי הפוך)</button>
+        <button class="ghost" id="btn-invert">↔ הפוך כיוון ידנית</button>
         <button class="big" id="btn-start">התחל</button>
         <p class="hint" id="hint-calib" hidden>לחוויה הכי טובה החזק את הטלפון לרוחב</p>
       </div>
@@ -37,7 +37,7 @@ export function createScreens(root, tilt, { onPlay, onStart }) {
 
   $('btn-play').addEventListener('click', () => onPlay());
   $('btn-start').addEventListener('click', () => onStart());
-  $('btn-invert').addEventListener('click', () => { tilt.invert = !tilt.invert; tilt.save(); });
+  $('btn-invert').addEventListener('click', () => tilt.flipDirection());
   $('seg-sens').addEventListener('click', (e) => {
     const v = e.target.dataset?.v;
     if (v) { tilt.sensitivity = v; tilt.save(); refreshSeg(); }
@@ -53,17 +53,20 @@ export function createScreens(root, tilt, { onPlay, onStart }) {
     showCalibrate() {
       visible = 'calib'; menu.hidden = true; calib.hidden = false; openedAt = performance.now();
       refreshSeg(); $('hint-calib').hidden = !portrait();
+      tilt.beginDirectionTest();
     },
     hide() { visible = null; menu.hidden = true; calib.hidden = true; },
     /** call every frame */
     update() {
       if (visible !== 'calib') return;
+      tilt.updateDirectionTest();
       const s = tilt.previewSteer;
       $('gdot').style.left = (50 + s * 46) + '%';
       $('lbl-left').classList.toggle('lit', s < -0.15);
       $('lbl-right').classList.toggle('lit', s > 0.15);
       const st = $('calib-status');
-      if (tilt.active) st.textContent = `חיישן פעיל ✓   זווית: ${tilt.previewDeg.toFixed(0)}°`;
+      if (tilt.active) st.textContent = tilt.dirLearned ? `✓ הכיוון זוהה. סובב שמאלה וימינה כדי לוודא (${tilt.previewDeg.toFixed(0)}°)`
+        : tilt.dirTest ? `חיישן פעיל ✓  מחכה שתטה ימינה… (${tilt.previewDeg.toFixed(0)}°)` : `חיישן פעיל ✓  (${tilt.previewDeg.toFixed(0)}°)`;
       else if (performance.now() - openedAt > 1500) st.textContent = 'לא מזוהים חיישני תנועה. אפשר להמשיך עם מקלדת או מגע (נגיעה בצד שמאל / ימין).';
       else st.textContent = 'בודק חיישנים…';
       st.classList.toggle('bad', !tilt.active && performance.now() - openedAt > 1500);

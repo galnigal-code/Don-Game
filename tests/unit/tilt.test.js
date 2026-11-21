@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { DEG, wrapPi, gravityToScreen, rollAngle, rollFromMotion, smoothAngle, steerFromRoll } from '../../src/input/tiltMath.js';
 
 const G = 9.81;
@@ -78,4 +78,70 @@ describe('helpers', () => {
     expect(smoothAngle(0, 10 * DEG, 0.25) / DEG).toBeCloseTo(2.5, 6);
   });
   it('rollAngle of straight-up is 0', () => { expect(rollAngle({ x: 0, y: 9.8 })).toBeCloseTo(0, 9); });
+});
+
+import { TiltInput } from '../../src/input/TiltInput.js';
+
+describe('direction test (learns what "right" means from the player)', () => {
+  let clock = 1000;
+  const realNow = performance.now.bind(performance);
+  beforeEach(() => { clock = 1000; performance.now = () => clock; });
+  afterEach(() => { performance.now = realNow; });
+
+  // feed the sensor for `ms` milliseconds at 60 Hz with a phone rotated `deg` degrees clockwise
+  // mirrorX = a device whose x axis is reported mirrored (the only kind of fault that flips the steering direction;
+  // negating BOTH axes, as iOS does, only shifts the zero angle by 180 degrees)
+  function feed(t, deg, angle = 0, ms = 1000, mirrorX = false) {
+    const u = deviceUp(deg, angle);
+    for (let i = 0; i < ms / 16; i++) {
+      clock += 16;
+      t.onMotion({ accelerationIncludingGravity: { x: mirrorX ? -u.x : u.x, y: u.y, z: 0 } });
+    }
+  }
+  function pose(mirrorX, angle) {
+    const t = new TiltInput();
+    t.isIOS = false;
+    feed(t, 0, angle, 800, mirrorX);
+    t.beginDirectionTest();
+    return t;
+  }
+  it('keeps the default when the sensor agrees (tilting right gives positive roll)', () => {
+    const t = pose(false, 0);
+    feed(t, 20, 0, 300); t.updateDirectionTest();
+    expect(t.dirLearned).toBe(true); expect(t.invert).toBe(false);
+  });
+  it('flips when the device reports the opposite sign for the same physical motion', () => {
+    for (const angle of [0, 90, 270]) {
+      const t = pose(true, angle);            // a phone whose x axis is mirrored
+      feed(t, 20, angle, 300, true); t.updateDirectionTest();
+      expect(t.dirLearned).toBe(true); expect(t.invert).toBe(true);
+      expect(t.previewSteer).toBeGreaterThan(0);   // and now tilting right steers right
+    }
+  });
+  it('negating both axes (iOS-style) does not change the direction at all', () => {
+    const t = new TiltInput(); t.isIOS = false;
+    const u0 = deviceUp(0, 0), u1 = deviceUp(20, 0);
+    for (let i = 0; i < 50; i++) { clock += 16; t.onMotion({ accelerationIncludingGravity: { x: -u0.x, y: -u0.y, z: 0 } }); }
+    t.beginDirectionTest();
+    for (let i = 0; i < 20; i++) { clock += 16; t.onMotion({ accelerationIncludingGravity: { x: -u1.x, y: -u1.y, z: 0 } }); }
+    t.updateDirectionTest();
+    expect(t.dirLearned).toBe(true); expect(t.invert).toBe(false);
+  });
+  it('ignores tiny movements and stops after learning once', () => {
+    const t = pose(false, 0);
+    feed(t, 6, 0, 500); t.updateDirectionTest();
+    expect(t.dirLearned).toBe(false);
+    feed(t, 20, 0, 300); t.updateDirectionTest();
+    expect(t.dirLearned).toBe(true);
+    const inv = t.invert;
+    feed(t, -25, 0, 500); t.updateDirectionTest();
+    expect(t.invert).toBe(inv);
+  });
+  it('manual flip overrides and stops the test', () => {
+    const t = pose(false, 0);
+    t.flipDirection();
+    expect(t.invert).toBe(true); expect(t.dirTest).toBe(false);
+    feed(t, 25, 0, 500); t.updateDirectionTest();
+    expect(t.invert).toBe(true);
+  });
 });
