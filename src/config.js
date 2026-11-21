@@ -6,8 +6,8 @@ export const CONFIG = {
     TURBO_MULT: 1.6, TURBO_TIME: 2.5, TURBO_MAX: 2, TURBO_RECHARGE: 7,
     STEER_RATE: 1.6, MAX_YAW: 0.55, YAW_RETURN: 2.0, DRIFT_K: 0.55, STEER_SMOOTH: 12,
     SAND_MULT: 0.6, GRAVITY: 22,
-    HIT_SPEED_MULT: { spin: 0.35, launch: 0.1, slip: 0.7, bump: 0.45 },
-    HIT_TIME: { spin: 1.5, launch: 1.5, slip: 1.5, bump: 1.0 },
+    HIT_SPEED_MULT: { spin: 0.35, launch: 0.1, slip: 0.7, bump: 0.45, shove: 0.85 },
+    HIT_TIME: { spin: 1.5, launch: 1.5, slip: 1.5, bump: 1.0, shove: 0.7 },
     HIT_DECEL: 55, RESPAWN_TIME: 1.5, INVULN_AFTER_RESPAWN: 1.5, STUCK_TIME: 3,
     RADIUS: 1.1,
   },
@@ -24,9 +24,11 @@ export const CONFIG = {
   },
   // scattered item boxes (V2-A): groups of 1-2, random lateral position, new layout every race
   boxes: { FIRST_S: 150, LAST_MARGIN: 80, GAP_MIN: 80, GAP_MAX: 170, PAIR_CHANCE: 0.3, PAIR_SPREAD_S: 6, PAIR_MIN_D: 3.5, WALL_MARGIN: 2.5, CLIFF_MARGIN: 4, RAMP_CLEAR: 25, OBSTACLE_CLEAR: 4, ATTEMPTS: 8 },
-  bots: { RUBBER_RANGE: 250, RUBBER_SLOW_MAX: 0.2, RUBBER_BOOST_MAX: 0.08, DODGE_SUCCESS: 0.7 },
+  bots: { OVERTAKE_DIST: 18, OVERTAKE_SKILL: 0.9, NUDGE_RATE: 0.8, NUDGE_TIME: 0.6, RUBBER_RANGE: 250, RUBBER_SLOW_MAX: 0.2, RUBBER_BOOST_MAX: 0.08, DODGE_SUCCESS: 0.7 },
   tilt: { PLANAR_MIN: 3, DIRECTION_TEST_DEG: 12, DEAD_ZONE_DEG: 3, MAX_ANGLE_DEG: { low: 38, normal: 30, high: 22 }, SMOOTH_TAU: 0.06, INVERT: false },
   render: { MAX_PIXEL_RATIO: 1.5, FOG_NEAR: 120, FOG_FAR: 650, SHADOW_SIZE: 1024 },
   countdown: { SECONDS: 3, START_BOOST_WINDOW: 0.25, START_BOOST_TIME: 0.8, START_BOOST_MULT: 1.25, GO_TEXT_TIME: 0.8 },
-  race: { FORCE_FINISH_AFTER: 60, COLLIDE_A: 2.1, COLLIDE_B: 1.0, COLLIDE_SLOW: 0.9, COLLIDE_COOLDOWN: 0.3 },
+  race: { FORCE_FINISH_AFTER: 60, COLLIDE_A: 2.1, COLLIDE_B: 1.0 },
+  // car-to-car impacts (V2-B): impulse with mass, thrown sideways, a hard hit makes the lighter car slide ("shove")
+  bump: { CONTACT_A: 4.2, CONTACT_B: 1.9, LAT_DAMP: 3, PAIR_COOLDOWN: 0.25, TURBO_MASS: 2, RESTITUTION: 0.3, MAX_VD: 9, MAX_DSPEED: 6, SHOVE_REL: 9, YAW_GAIN: 0.03, YAW_MAX: 0.25, EVENT_MIN: 3, WALL_BOUNCE: 0.3 },
 };

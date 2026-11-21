@@ -6,7 +6,6 @@ import { createWorld } from '../../src/sim/World.js';
 import { createBrain, drivePlayerProxy, driveSimple } from '../../src/sim/BotDriver.js';
 import { createRng } from '../../src/sim/rng.js';
 import { computeRanks } from '../../src/sim/race.js';
-import { resolveCarCollisions } from '../../src/sim/collisions.js';
 
 const track = createTrack();
 const DT = CONFIG.sim.STEP;
@@ -53,33 +52,6 @@ describe('ranking', () => {
     const r = computeRanks([b, c, a]);
     expect(r.map((x) => x.id)).toEqual([1, 3, 2]);
     expect(a.rank).toBe(1); expect(c.rank).toBe(2); expect(b.rank).toBe(3);
-  });
-});
-
-describe('collisions', () => {
-  it('pushes overlapping cars apart and slows only the car behind (once)', () => {
-    const a = createCar({ id: 1, s: 100, d: 0 }), b = createCar({ id: 2, s: 101.5, d: 0.3 });
-    a.state = b.state = 'driving'; a.speed = b.speed = 30;
-    resolveCarCollisions([a, b]);
-    const { COLLIDE_A: A, COLLIDE_B: B } = CONFIG.race;
-    expect(Math.hypot((b.s - a.s) / A, (b.d - a.d) / B)).toBeGreaterThanOrEqual(0.99);
-    expect(a.speed).toBeCloseTo(27, 5);
-    expect(b.speed).toBe(30);
-    resolveCarCollisions([a, b]);
-    expect(a.speed).toBeCloseTo(27, 5); // cooldown: no repeated drain
-  });
-  it('ignores cars that are far apart, side by side in separate lanes, or not driving', () => {
-    const a = createCar({ id: 1, s: 100, d: -3 }), b = createCar({ id: 2, s: 100, d: 3 }), c = createCar({ id: 3, s: 160, d: -3 });
-    resolveCarCollisions([a, b, c]);
-    expect([a.s, a.d, b.s, b.d]).toEqual([100, -3, 100, 3]);
-    const f = createCar({ id: 4, s: 100, d: -3 }); f.state = 'finished';
-    const before = a.speed; resolveCarCollisions([a, f]); expect(a.speed).toBe(before);
-  });
-  it('handles exactly overlapping cars without NaN', () => {
-    const a = createCar({ id: 1, s: 50, d: 0 }), b = createCar({ id: 2, s: 50, d: 0 });
-    resolveCarCollisions([a, b]);
-    expect(Number.isFinite(a.d) && Number.isFinite(b.d)).toBe(true);
-    expect(a.d).not.toBe(b.d);
   });
 });
 

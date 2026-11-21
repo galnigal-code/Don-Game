@@ -83,6 +83,19 @@ describe('steering input', () => {
   });
 });
 
+describe('collision directions', () => {
+  it('a car thrown to the right (vd > 0) appears further to the right on screen, one thrown left appears further left', () => {
+    for (const [vd, sign] of [[8, 1], [-8, -1]]) {
+      const car = createCar({ s: 300, d: 0 }); car.speed = 30;
+      const before = screenX(260, 0, { s: car.s, d: car.d });
+      car.vd = vd;
+      for (let i = 0; i < 30; i++) { car.input.steer = 0; stepCar(car, DT, track); }
+      const after = screenX(260, 0, { s: car.s, d: car.d });
+      expect(Math.sign(after - before), `vd ${vd}`).toBe(sign);
+    }
+  });
+});
+
 describe('keyboard and touch', () => {
   const handlers = {};
   let saved;

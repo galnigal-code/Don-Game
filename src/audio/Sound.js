@@ -104,6 +104,13 @@ export class Sound {
   explosion(vol = 1) { this.noise(0.8, { vol: 0.6 * vol, from: 1800, to: 80 }); this.tone(110, 0.5, { type: 'sine', vol: 0.4 * vol, slideTo: 35 }); }
   hit() { this.tone(160, 0.35, { type: 'sawtooth', vol: 0.22, slideTo: 60 }); this.noise(0.25, { vol: 0.3, from: 1200, to: 150 }); }
   shieldBlock() { this.tone(1200, 0.18, { type: 'sine', vol: 0.18, slideTo: 1800 }); }
+  /** Metal-on-metal clank of two cars touching. strength is the closing speed in m/s. */
+  clank(strength = 5, vol = 1) {
+    const k = Math.min(1, 0.3 + strength / 25) * vol;
+    this.noise(0.12, { vol: 0.28 * k, type: 'highpass', from: 4200, to: 1800 });
+    this.tone(190 + Math.min(strength, 25) * 4, 0.1, { type: 'square', vol: 0.12 * k, slideTo: 110 });
+    this.tone(1250, 0.05, { type: 'triangle', vol: 0.07 * k });
+  }
   bump() { this.noise(0.15, { vol: 0.3, from: 700, to: 120 }); this.tone(90, 0.12, { type: 'sine', vol: 0.25 }); }
   fall() { this.tone(600, 0.9, { type: 'sine', vol: 0.18, slideTo: 80 }); }
   respawn() { this.tone(300, 0.12, { vol: 0.14, type: 'triangle' }); this.tone(450, 0.12, { vol: 0.14, delay: 0.1, type: 'triangle' }); this.tone(600, 0.18, { vol: 0.14, delay: 0.2, type: 'triangle' }); }

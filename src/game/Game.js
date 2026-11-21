@@ -378,6 +378,17 @@ export class Game {
         for (let q = 0; q < 14; q++) this.particles.emit(tmp.x, tmp.y, tmp.z, (Math.random() - 0.5) * 12, 2 + Math.random() * 7, (Math.random() - 0.5) * 12,
           { size: 0.5 + Math.random() * 0.6, life: 0.6 + Math.random() * 0.5, color: q % 3 === 0 ? 0x2a2a2a : q % 3 === 1 ? 0xff8a1f : 0xc9a36b, alpha: 0.85, grow: 1.4, drag: 1.2, up: -9 });
         if (Math.abs(e.s - target.s) < 25) this.rig.shake(0.18);
+      } else if (e.type === 'collide') {
+        T.toWorld(e.s, e.d, 0.6, tmp);
+        const n = 6 + Math.min(8, Math.round(e.strength * 0.5));
+        for (let q = 0; q < n; q++) this.particles.emit(tmp.x, tmp.y, tmp.z, (Math.random() - 0.5) * 9, 1 + Math.random() * 4, (Math.random() - 0.5) * 9,
+          { size: 0.22 + Math.random() * 0.18, life: 0.2 + Math.random() * 0.15, color: q % 2 ? 0xffffff : 0xffd45a, alpha: 1, grow: 0.3, drag: 2, up: -7 });
+        this.sound.at(dist(e.s), (v) => this.sound.clank(e.strength, v));
+        if (e.a === p.id || e.b === p.id) {
+          this.rig.shake(Math.min(0.4, 0.08 + e.strength * 0.015));
+          const nowMs = performance.now();
+          if (nowMs - (this.lastVibrate || 0) > 400) { this.lastVibrate = nowMs; navigator.vibrate?.(e.strength > 12 ? 45 : 25); }
+        }
       } else if (e.type === 'hit') {
         if (e.carId === p.id) { this.rig.shake(0.35); this.sound.hit(); }
         else if (e.kind === 'bump') this.sound.at(dist(this.world.cars.find((x) => x.id === e.carId).s), this.sound.bump);

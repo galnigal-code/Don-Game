@@ -10,7 +10,7 @@ export function createCar({ id = 0, name = 'Player', color = 0xd0201c, isPlayer 
     id, name, color, isPlayer,
     s, d, h: 0, vy: 0, yaw: 0, speed: 0, steer: 0,
     input: { steer: 0, turbo: false, item: false },
-    prevTurboInput: false, turbosLeft: C.TURBO_MAX, turboRecharge: 0, turboT: 0, boostT: 0, collideCooldown: 0, rank: 0,
+    prevTurboInput: false, turbosLeft: C.TURBO_MAX, turboRecharge: 0, turboT: 0, boostT: 0, rank: 0, vd: 0, bumpCd: {},
     item: null, rouletteT: 0, prevItemInput: false, gunShotsLeft: 0, gunCooldown: 0, shieldT: 0,
     hit: { kind: null, t: 0 }, gunSlow: 0,
     state: 'driving', // driving | falling | respawning | finished
@@ -29,7 +29,7 @@ export function activateTurbo(car) {
 
 function respawn(car) {
   car.s = car.lastCheckpointS; car.d = 0; car.yaw = 0; car.h = 0; car.vy = 0;
-  car.speed = C.CRUISE_SPEED * 0.5; car.steer = 0;
+  car.speed = C.CRUISE_SPEED * 0.5; car.steer = 0; car.vd = 0; car.bumpCd = {};
   car.hit.kind = null; car.hit.t = 0; car.gunShotsLeft = 0;
   car.state = 'driving'; car.invulnT = C.INVULN_AFTER_RESPAWN;
   car.stuckT = 0; car.wallCooldown = 0; car.respawns++;
@@ -49,7 +49,8 @@ export function stepCar(car, dt, track) {
   }
   if (car.state === 'falling') {
     car.s += car.speed * Math.cos(car.yaw) * dt;
-    car.d += car.speed * Math.sin(car.yaw) * dt;
+    car.d += (car.speed * Math.sin(car.yaw) + car.vd) * dt;
+    car.vd *= Math.exp(-1.5 * dt);
     car.speed *= 1 - 0.5 * dt;
     car.vy -= C.GRAVITY * dt; car.h += car.vy * dt;
     car.fallT -= dt;
@@ -68,7 +69,7 @@ export function stepCar(car, dt, track) {
     if (car.turboRecharge >= C.TURBO_RECHARGE) { car.turbosLeft++; car.turboRecharge = 0; }
   } else car.turboRecharge = 0;
   car.boostT = Math.max(0, car.boostT - dt);
-  car.collideCooldown = Math.max(0, car.collideCooldown - dt);
+  for (const k in car.bumpCd) if ((car.bumpCd[k] -= dt) <= 0) delete car.bumpCd[k];
   car.rouletteT = Math.max(0, car.rouletteT - dt);
   car.shieldT = Math.max(0, car.shieldT - dt);
   car.invulnT = Math.max(0, car.invulnT - dt);
@@ -109,6 +110,7 @@ export function stepCar(car, dt, track) {
   let se = car.steer;
   if (car.hit.kind === 'slip') se = se * 0.3 + Math.sin(car.t * 9) * 0.6;
   if (car.hit.kind === 'spin') se = 0;
+  if (car.hit.kind === 'shove') se = se * 0.5 + Math.sin(car.t * 11) * 0.35;
 
   let ds, dd;
   if (!air) {
@@ -123,6 +125,9 @@ export function stepCar(car, dt, track) {
     ds = car.speed * Math.cos(car.yaw) * dt;
     dd = car.speed * Math.sin(car.yaw) * dt;
   }
+  dd += car.vd * dt;                                   // thrown sideways by a collision
+  car.vd *= Math.exp(-CONFIG.bump.LAT_DAMP * dt);
+  if (Math.abs(car.vd) < 0.02) car.vd = 0;
   const prevS = car.s;
   car.s += ds; car.d += dd;
   if (car.s > track.maxS) { car.s = track.maxS; car.speed = 0; }
@@ -151,6 +156,7 @@ export function stepCar(car, dt, track) {
     if (absd > limit) {
       car.d = side * limit;
       if (car.yaw * side > 0) car.yaw = -car.yaw * 0.4;
+      if (car.vd * side > 0) car.vd = -car.vd * CONFIG.bump.WALL_BOUNCE;
       if (car.wallCooldown <= 0) { car.speed *= 0.85; car.wallCooldown = CONFIG.track.WALL_PUSH_COOLDOWN; car.wallHit = true; }
     }
   }

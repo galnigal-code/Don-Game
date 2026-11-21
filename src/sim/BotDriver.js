@@ -19,15 +19,18 @@ export function driveSimple(car, track, offset = 0) {
   car.input.steer = steerTowards(car, track, clamp(offset, -here.halfWidth + 2, here.halfWidth - 2), here);
 }
 
-export function createBrain(rng, track) {
+export function createBrain(rng, track, lane = null) {
   const L = track.finishS;
   return {
-    offset: (rng() - 0.5) * 4,                       // personal line, +-2 m
+    // personal line: bots spread over three lanes (about 4 m apart) so that bots running side by side do not touch
+    offset: lane === null ? (rng() - 0.5) * 4 : (lane - 1) * 4 + (rng() - 0.5),
     noisePhase: rng() * Math.PI * 2, noiseFreq: 0.35 + rng() * 0.25,
     skill: 0.975 + rng() * 0.02,                     // 97.5-99.5 % of the player pace (rubber band closes the gap)
     nextTurboAt: 0.08 * L + rng() * 250,             // next spot where this bot wants to use a turbo
     startBoost: rng() < 0.4,
     dodge: new Map(),                 // entity id -> will this bot avoid it? (decided once, DODGE_SUCCESS)
+    aggression: 0.2 + rng() * 0.5,    // how often it leans into a car next to it
+    nudgeUntil: 0, nudgeCar: null, overtakeSkill: new Map(),
     heldItem: null, heldSince: 0, useDelay: 0.4 + rng() * 0.8,
   };
 }
@@ -45,6 +48,8 @@ export function driveBot(car, brain, world) {
     + Math.sin(world.time * brain.noiseFreq + brain.noisePhase) * 1.2;
   const ahead = track.sample(car.s + look, S2);
   target = clamp(avoidAndCollect(car, brain, world, target), -hw + 1.5, hw - 1.5);
+  target = overtake(car, brain, world, target, here, hw);
+  target = nudge(car, brain, world, target, here, hw);
   const limL = ahead.edgeLeft === 'cliff' ? hw - 3.5 : hw - 2;
   const limR = ahead.edgeRight === 'cliff' ? hw - 3.5 : hw - 2;
   target = clamp(target, -limL, limR);
@@ -55,6 +60,42 @@ export function driveBot(car, brain, world) {
   driveTurbo(car, brain, world);
 }
 
+
+/**
+ * Overtake instead of driving into the back of a slower car: pass on the side with more room (away from the nearer edge).
+ * Each bot skips this for a given car with probability 1 - OVERTAKE_SKILL, so contact still happens now and then.
+ */
+function overtake(car, brain, world, target, here, hw) {
+  let ahead = null;
+  for (const c of world.cars) {
+    if (c === car || c.state !== 'driving') continue;
+    const ds = c.s - car.s;
+    if (ds > 1 && ds < CONFIG.bots.OVERTAKE_DIST && Math.abs(c.d - car.d) < 2.9 && c.speed < car.speed + 4 && (!ahead || ds < ahead.s - car.s)) ahead = c;
+  }
+  if (!ahead) return target;
+  let skilled = brain.overtakeSkill.get(ahead.id);
+  if (skilled === undefined) { skilled = world.rng() < CONFIG.bots.OVERTAKE_SKILL; brain.overtakeSkill.set(ahead.id, skilled); }
+  if (!skilled) return target;
+  // pass on the side with more room; never towards a cliff edge
+  let side = ahead.d > 0 ? -1 : 1;
+  if ((side < 0 && here.edgeLeft === 'cliff') || (side > 0 && here.edgeRight === 'cliff')) side = -side;
+  return clamp(ahead.d + side * 3.2, -hw + 1.8, hw - 1.8);
+}
+
+/** Now and then lean into a car that is right beside us (never near a cliff edge: bots do not push each other off). */
+function nudge(car, brain, world, target, here, hw) {
+  if (world.time < brain.nudgeUntil && brain.nudgeCar && brain.nudgeCar.state === 'driving') return clamp(brain.nudgeCar.d, -hw + 1.5, hw - 1.5);
+  if (here.edgeLeft === 'cliff' || here.edgeRight === 'cliff' || car.state !== 'driving') return target;
+  for (const c of world.cars) {
+    if (c === car || c.state !== 'driving') continue;
+    const gapD = Math.abs(c.d - car.d);
+    if (Math.abs(c.s - car.s) < 3 && gapD > 1.5 && gapD < 4.5) {
+      if (world.rng() < brain.aggression * CONFIG.bots.NUDGE_RATE / 60) { brain.nudgeUntil = world.time + CONFIG.bots.NUDGE_TIME; brain.nudgeCar = c; }
+      break;
+    }
+  }
+  return target;
+}
 
 /** Use a turbo when one is charged: at planned spots along the track, or right away when far behind. */
 export function driveTurbo(car, brain, world) {

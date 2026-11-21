@@ -24,6 +24,7 @@ export function createWorld({ track, seed = 1, bots = 3 } = {}) {
   const slots = shuffle(GRID.slice(), rng);
   const names = shuffle(BOT_NAMES.slice(), rng);
 
+  const shuffledLanes = shuffle([0, 1, 2], rng);
   const cars = [];
   const player = createCar({ id: 0, name: 'אתה', color: 0xd0201c, isPlayer: true, s: slots[0][0], d: slots[0][1] });
   cars.push(player);
@@ -31,19 +32,20 @@ export function createWorld({ track, seed = 1, bots = 3 } = {}) {
   for (let i = 0; i < bots; i++) {
     const car = createCar({ id: i + 1, name: names[i], color: BOT_COLORS[i % BOT_COLORS.length], s: slots[i + 1][0], d: slots[i + 1][1] });
     cars.push(car);
-    brains.set(car, createBrain(rng, track));
+    brains.set(car, createBrain(rng, track, shuffledLanes[i]));
   }
 
   const fixed = FIXED_OBSTACLES.map((o, i) => ({ id: i + 1, type: o.kind, s: o.s, d: o.d, ownerId: -1, age: 0, alive: true, travel: 0, fixed: true }));
   const world = {
     track, rng, time: 0, cars, player, brains,
     entities: fixed, boxes: generateBoxes(track, createRng(seed * 7919 + 13)),   // separate rng: the layout must not disturb the bots' randomness
-    events: [], entityId: fixed.length, stats: { pickups: 0, uses: 0, hits: 0 },
+    events: [], entityId: fixed.length, stats: { pickups: 0, uses: 0, hits: 0, bumps: 0 },
     finishOrder: [], leaderS: 0, sincePlayerFinish: 0, ranked: computeRanks(cars),
 
     /** Race start: the player may get the start boost; some bots always may. */
     go(playerBoost = false) {
-      const boost = (car) => { car.boostT = CONFIG.countdown.START_BOOST_TIME; car.speed = CONFIG.car.CRUISE_SPEED; };
+      // the boost is a strong push, not a teleport to full speed: cars on the grid are only 6 m apart
+      const boost = (car) => { car.boostT = CONFIG.countdown.START_BOOST_TIME; car.speed = CONFIG.car.CRUISE_SPEED * 0.45; };
       if (playerBoost) boost(player);
       for (const [car, brain] of brains) if (brain.startBoost) boost(car);
     },
@@ -80,7 +82,7 @@ export function createWorld({ track, seed = 1, bots = 3 } = {}) {
       }
       stepEntities(world, dt);
       stepBoxes(world, dt);
-      resolveCarCollisions(cars);
+      resolveCarCollisions(cars, { world });
       world.ranked = computeRanks(cars);
 
       // safety net: nobody should be stuck for long after the player is done

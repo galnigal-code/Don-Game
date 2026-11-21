@@ -113,6 +113,14 @@ await page.evaluate(() => { __game.world.player.turboRecharge = 6.6; });
 await wait(900);
 check(await page.evaluate(() => __game.world.player.turbosLeft === 2 && document.getElementById('turbo-count').textContent === '2'), 'a turbo charge is added after the recharge time and the counter shows 2');
 
+// car-to-car collision: a car on the RIGHT that steers into us throws us LEFT (direction contract), with feedback and no errors
+await page.evaluate(() => { const w = __game.world, p = w.player, o = w.cars.find((c) => !c.isPlayer); p.s = 400; p.d = 0; p.speed = 30; p.yaw = 0; p.vd = 0; p.state = 'driving'; p.hit.kind = null;
+  o.s = 400; o.d = 1.6; o.speed = 30; o.yaw = -0.3; o.vd = 0; o.state = 'driving'; o.hit.kind = null; o.bumpCd = {}; p.bumpCd = {}; window.__b0 = w.stats.bumps; });
+await wait(400);
+const col = await page.evaluate(() => ({ bumps: __game.world.stats.bumps - window.__b0, vd: __game.world.player.vd, d: __game.world.player.d }));
+check(col.bumps >= 1, `a collision was registered (${col.bumps})`);
+check(col.d < 0.2 || col.vd < 0, `rammed from the right -> we are thrown LEFT (d=${col.d.toFixed(2)}, vd=${col.vd.toFixed(2)})`);
+
 // audio
 check(await page.evaluate(() => __game.sound.ctx && __game.sound.ctx.state === 'running'), 'audio context is running after the play tap');
 check(await page.evaluate(() => __game.sound.musicOn), 'music is playing during the race');
