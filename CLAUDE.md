@@ -5,15 +5,18 @@ Mobile-browser 3D racing game prototype (Three.js + Vite). Tilt-to-steer, auto-f
 ## Source of truth
 - `docs/SPEC.md` – approved product spec (Hebrew). Defines WHAT the game does. Do not change behaviour without asking the user.
 - `docs/TECH_SPEC.md` – technical spec (Hebrew, code in English). Defines HOW. Follow its architecture, file layout and milestones (section 17). Numbers in `config.js` are tuning values and may be adjusted.
+- **Version 2 (current work):** `docs/PLAN_V2.md` (approved plan + the user's decisions) and `docs/TECH_SPEC_V2.md` (how to build it). Build V2-A -> V2-B -> V2-C -> V2-D, one milestone at a time, with the per-milestone checklist in TECH_SPEC_V2 §1 and §6.
 
 ## Working rules
 - Build milestone by milestone (M0 → M7). After each milestone: `npm test` green, `npm run build` green, commit, push to `main`, then tell the user in Hebrew what they can try at https://galnigal-code.github.io/Don-Game/ .
 - `src/sim/` must stay pure: no `three`, no DOM. All game logic lives there and is unit-tested with Vitest.
-- No external assets (models, textures, audio files). Build meshes from Three.js geometries and synthesize sound with Web Audio.
+- No external models or audio files: build meshes from Three.js geometries and synthesize sound with Web Audio.
+- **Exception approved for V2-D:** CC0 textures from Poly Haven (asphalt, sand, rock; 1K) in `public/textures/`, fetched with `tools/fetch-textures.mjs`, each listed in `docs/CREDITS.md`. The game must still run without them (procedural fallback). The session network allows `dl.polyhaven.org` and `api.polyhaven.com`; if the download command needs permission, ask the user, never work around it.
 - Pin exact dependency versions (`three@0.186.1`).
 - UI text is Hebrew, `dir="rtl"`, but turbo button is physically LEFT and item button physically RIGHT.
 - No real car brands or logos.
 - M2 requires the user to test tilt on a real Android phone. Stop and ask them before moving past M2.
+- **Approved product change (V2-C):** the giant roller covers the whole road width and a car it catches is eliminated ("נדרס"). Everything else still can never eliminate a car; respawns are always placed ahead of the roller.
 - Communicate with the user in Hebrew.
 
 ## Commands
