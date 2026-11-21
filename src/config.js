@@ -17,11 +17,13 @@ export const CONFIG = {
     MISSILE_SPEED: 70, MISSILE_TURN: 12, BULLET_SPEED: 90, BULLET_RANGE: 120,
     GUN_SHOTS: 5, GUN_INTERVAL: 0.12, GUN_SLOW_PER_HIT: 0.1, GUN_SLOW_MAX: 0.5, GUN_SLOW_DECAY: 0.25,
     OWN_DROP_IMMUNITY: 1.5, DROP_BEHIND: 3, HIT_IMMUNITY: 0.5, LAUNCH_VY: 9,
-    BOX_LANES: [-6, -2, 2, 6], BOX_LANES_NARROW: [-3.5, 0, 3.5], BOX_REACH_S: 1.5, BOX_REACH_D: 1.6, BOX_MAX_H: 1.5,
+    BOX_REACH_S: 1.5, BOX_REACH_D: 1.6, BOX_MAX_H: 1.5,
     // extra reach added to the car's ellipse when testing a hit
     REACH: { mine: 0.8, oil: 1.2, barrel: 0.7, rock: 0.9, missile: 0.8, bullet: 0.4 },
     LIFE: { mine: 25, oil: 20, barrel: 30 }, MISSILE_RANGE_NO_TARGET: 200, MISSILE_RANGE_MAX: 450,
   },
+  // scattered item boxes (V2-A): groups of 1-2, random lateral position, new layout every race
+  boxes: { FIRST_S: 150, LAST_MARGIN: 80, GAP_MIN: 80, GAP_MAX: 170, PAIR_CHANCE: 0.3, PAIR_SPREAD_S: 6, PAIR_MIN_D: 3.5, WALL_MARGIN: 2.5, CLIFF_MARGIN: 4, RAMP_CLEAR: 25, OBSTACLE_CLEAR: 4, ATTEMPTS: 8 },
   bots: { RUBBER_RANGE: 250, RUBBER_SLOW_MAX: 0.2, RUBBER_BOOST_MAX: 0.08, DODGE_SUCCESS: 0.7 },
   tilt: { PLANAR_MIN: 3, DIRECTION_TEST_DEG: 12, DEAD_ZONE_DEG: 3, MAX_ANGLE_DEG: { low: 38, normal: 30, high: 22 }, SMOOTH_TAU: 0.06, INVERT: false },
   render: { MAX_PIXEL_RATIO: 1.5, FOG_NEAR: 120, FOG_FAR: 650, SHADOW_SIZE: 1024 },

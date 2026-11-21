@@ -75,15 +75,7 @@ export function stepGun(car, world, dt) {
   world.entities.push({ id: ++world.entityId, type: 'bullet', ownerId: car.id, age: 0, alive: true, travel: 0, s: car.s + 2, d: car.d });
 }
 
-/** Item boxes: collect when driving through; the box respawns after a few seconds. */
-export function boxLanes(track, s) {
-  return track.sample(s).halfWidth < 7 ? CONFIG.items.BOX_LANES_NARROW : CONFIG.items.BOX_LANES;
-}
-export function createBoxes(track, rows) {
-  const boxes = [];
-  for (const s of rows) for (const d of boxLanes(track, s)) boxes.push({ id: boxes.length, s, d, t: 0 });
-  return boxes;
-}
+/** Item boxes: collect when driving through; the box respawns after a few seconds. (Layout: boxLayout.js) */
 export function stepBoxes(world, dt) {
   const I = CONFIG.items;
   for (const b of world.boxes) {

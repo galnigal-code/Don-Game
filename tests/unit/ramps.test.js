@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { CONFIG } from '../../src/config.js';
 import { createTrack } from '../../src/sim/TrackModel.js';
 import { createCar, stepCar } from '../../src/sim/Car.js';
-import { RAMPS, FIXED_OBSTACLES, SEGMENTS, BOX_ROWS } from '../../src/sim/trackData.js';
+import { RAMPS, FIXED_OBSTACLES, SEGMENTS } from '../../src/sim/trackData.js';
 
 const track = createTrack();
 const DT = CONFIG.sim.STEP;
@@ -131,9 +131,6 @@ describe('track layout is sane', () => {
     const rows = new Map();
     for (const o of FIXED_OBSTACLES) rows.set(o.s, (rows.get(o.s) || 0) + 1);
     for (const n of rows.values()) expect(n).toBeLessThanOrEqual(2);
-  });
-  it('box rows are not on a ramp or in a gap', () => {
-    for (const s of BOX_ROWS) expect(inZones(s, rampZones), `box row ${s}`).toBe(false);
   });
   it('the whole race still takes about 90 s', () => {
     expect(track.finishS / C.CRUISE_SPEED).toBeGreaterThan(85);

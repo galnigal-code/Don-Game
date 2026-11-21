@@ -26,8 +26,6 @@ export function heightAt(s) {
   return ramp * (4 * Math.sin(s / 220) + 3 * Math.sin(s / 97 + 1));
 }
 
-// Item-box rows (s along the track). Each row spans the road (3 boxes in the narrow canyon, 4 elsewhere).
-export const BOX_ROWS = [300, 820, 1300, 1750, 2200, 2600];
 
 // Ramps. The car follows the ramp surface (rise over len metres ending at s) and is launched at s.
 // With a gap, the road is missing between gap.from and gap.to: land beyond it or fall (respawn at the checkpoint).

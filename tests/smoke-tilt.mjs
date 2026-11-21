@@ -98,7 +98,7 @@ check(await page.evaluate(() => !document.getElementById('btn-item').disabled &&
 await page.click('#btn-item', { force: true });
 await wait(300);
 check(await page.evaluate(() => __game.world.player.shieldT > 4 && __game.world.player.item === null), 'tapping the item button uses the item');
-await page.evaluate(() => { const w = __game.world, c = w.player, b = w.boxes[0]; c.s = b.s; c.d = b.d; c.item = null; c.rouletteT = 0; });
+await page.evaluate(() => { const w = __game.world, c = w.player, b = w.boxes[w.boxes.length - 1]; c.s = b.s; c.d = b.d; c.item = null; c.rouletteT = 0; });   // the LAST box: no bot has reached it yet
 await wait(250);
 check(await page.evaluate(() => __game.world.player.rouletteT > 0 && document.getElementById('btn-item').classList.contains('rolling')), 'picking up a box starts the roulette on the button');
 await wait(1200);

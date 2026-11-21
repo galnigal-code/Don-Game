@@ -3,8 +3,7 @@ import { CONFIG } from '../../src/config.js';
 import { createTrack } from '../../src/sim/TrackModel.js';
 import { createWorld } from '../../src/sim/World.js';
 import { createBrain, drivePlayerProxy } from '../../src/sim/BotDriver.js';
-import { ITEMS, WEIGHTS, drawItem, applyHit, useItem, createBoxes } from '../../src/sim/items.js';
-import { BOX_ROWS } from '../../src/sim/trackData.js';
+import { ITEMS, WEIGHTS, drawItem, applyHit, useItem } from '../../src/sim/items.js';
 import { createRng } from '../../src/sim/rng.js';
 
 const track = createTrack();
@@ -41,14 +40,6 @@ describe('item draw', () => {
 });
 
 describe('boxes', () => {
-  it('are laid out in 6 rows, 4 lanes (3 in the narrow canyon)', () => {
-    const boxes = createBoxes(track, BOX_ROWS);
-    expect(BOX_ROWS).toHaveLength(6);
-    const perRow = BOX_ROWS.map((s) => boxes.filter((b) => b.s === s).length);
-    expect(perRow.every((n) => n === 3 || n === 4)).toBe(true);
-    expect(perRow.filter((n) => n === 4).length).toBeGreaterThanOrEqual(4);
-    for (const b of boxes) expect(Math.abs(b.d)).toBeLessThan(track.sample(b.s).halfWidth - 1.5);
-  });
   it('give one item, start a roulette, respawn after 3 s', () => {
     const w = world([[100, 0]]);
     w.boxes = [{ id: 0, s: 100, d: 0.5, t: 0 }];

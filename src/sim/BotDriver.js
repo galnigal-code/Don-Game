@@ -75,7 +75,8 @@ export function avoidAndCollect(car, brain, world, target) {
     let best = null;
     for (const b of world.boxes) {
       if (b.t > 0 || b.s < car.s + 8 || b.s > car.s + 60) continue;
-      if (!best || b.s < best.s - 1 || (Math.abs(b.s - best.s) <= 1 && Math.abs(b.d - car.d) < Math.abs(best.d - car.d))) best = b;
+      if (Math.abs(b.d - car.d) > (b.s - car.s) * 0.35 + 1) continue;      // cannot steer there in time: take the next one
+      if (!best || b.s < best.s) best = b;
     }
     if (best) target = best.d;
   }

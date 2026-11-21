@@ -98,9 +98,9 @@ describe('full race with 3 bots', () => {
     });
   }
   it('a sensible player using both turbos wins some races and rarely finishes last', () => {
-    const places = [1, 2, 3, 4, 5, 6, 7, 8].map((seed) => runRace(seed, { turboPlayer: true }).player.place);
-    expect(places.filter((p) => p === 1).length).toBeGreaterThanOrEqual(2);
-    expect(places.filter((p) => p === 4).length).toBeLessThanOrEqual(2);
+    const places = Array.from({ length: 16 }, (_, i) => runRace(i + 1, { turboPlayer: true }).player.place);
+    expect(places.filter((p) => p === 1).length).toBeGreaterThanOrEqual(4);     // measured over 40 races: ~50 % wins
+    expect(places.filter((p) => p === 4).length).toBeLessThanOrEqual(5);        // and ~20 % last
   });
   it('bots use at most 2 turbos', () => {
     const w = runRace(2);
