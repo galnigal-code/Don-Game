@@ -10,7 +10,7 @@ export function createCar({ id = 0, name = 'Player', color = 0xd0201c, isPlayer 
     id, name, color, isPlayer,
     s, d, h: 0, vy: 0, yaw: 0, speed: 0, steer: 0,
     input: { steer: 0, turbo: false, item: false },
-    prevTurboInput: false, turbosLeft: C.TURBOS_PER_RACE, turboT: 0,
+    prevTurboInput: false, turbosLeft: C.TURBOS_PER_RACE, turboT: 0, boostT: 0, collideCooldown: 0, rank: 0,
     item: null, gunShotsLeft: 0, gunCooldown: 0, shieldT: 0,
     hit: { kind: null, t: 0 }, gunSlow: 0,
     state: 'driving', // driving | falling | respawning | finished
@@ -62,6 +62,8 @@ export function stepCar(car, dt, track) {
 
   // timers
   car.turboT = Math.max(0, car.turboT - dt);
+  car.boostT = Math.max(0, car.boostT - dt);
+  car.collideCooldown = Math.max(0, car.collideCooldown - dt);
   car.invulnT = Math.max(0, car.invulnT - dt);
   car.wallCooldown = Math.max(0, car.wallCooldown - dt);
   car.gunSlow = Math.max(0, car.gunSlow - CONFIG.items.GUN_SLOW_DECAY * dt);
@@ -82,6 +84,7 @@ export function stepCar(car, dt, track) {
   // speed
   let target = finished ? 0 : C.CRUISE_SPEED;
   if (car.turboT > 0) target *= C.TURBO_MULT;
+  if (car.boostT > 0) target *= CONFIG.countdown.START_BOOST_MULT;
   if (car.offroad) target *= C.SAND_MULT;
   if (car.hit.kind) target *= C.HIT_SPEED_MULT[car.hit.kind];
   target *= 1 - car.gunSlow;

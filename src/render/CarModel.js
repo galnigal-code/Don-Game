@@ -1,7 +1,22 @@
 import * as THREE from 'three';
 
 // Simple low-poly sports car (nose points to -Z). Replaced by a nicer model in M6.
-export function createCarModel(color) {
+function nameLabel(name, color) {
+  const c = document.createElement('canvas');
+  c.width = 256; c.height = 64;
+  const g = c.getContext('2d');
+  g.font = '700 34px Rubik, system-ui, sans-serif';
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.lineWidth = 7; g.strokeStyle = 'rgba(0,0,0,.75)'; g.strokeText(name, 128, 34);
+  g.fillStyle = '#' + color.toString(16).padStart(6, '0'); g.fillText(name, 128, 34);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, fog: false }));
+  sp.scale.set(3.4, 0.85, 1); sp.position.set(0, 2.9, 0);
+  return sp;
+}
+
+export function createCarModel(color, name = null) {
   const root = new THREE.Group();       // positioned/oriented by the game
   const body = new THREE.Group();       // tilts (roll/pitch/spin) on top of root
   root.add(body);
@@ -36,5 +51,7 @@ export function createCarModel(color) {
     const r = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.36, 8), rim); r.rotation.z = Math.PI / 2; w.add(r);
     root.add(w); wheels.push(w);
   }
-  return { root, body, wheels };
+  const label = name ? nameLabel(name, color) : null;
+  if (label) root.add(label);
+  return { root, body, wheels, label };
 }

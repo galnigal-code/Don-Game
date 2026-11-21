@@ -51,9 +51,14 @@ check(await page.evaluate(() => document.getElementById('lbl-left').classList.co
 // hold a "comfortable" pose of 10 deg, calibrate on it
 await page.evaluate(() => { window.__tiltDeg = 10; });
 await page.waitForTimeout(1200);
+await page.evaluate(() => { window.__cd = []; setInterval(() => { const e = document.getElementById('countdown'); const t = e.hidden ? '' : e.textContent; if (t && window.__cd[window.__cd.length - 1] !== t) window.__cd.push(t); }, 50); });
 await page.click('#btn-start');
+await page.waitForFunction(() => __game.state === 'racing', null, { timeout: 8000 });
+await page.waitForTimeout(800);
+const cd = await page.evaluate(() => window.__cd);
+check(cd[0] === '3' && cd[1] === '2' && cd[2] === '1' && cd[3].startsWith('GO'), 'countdown shows 3, 2, 1, GO: ' + JSON.stringify(cd));
+check(await page.evaluate(() => __game.world.cars.length === 4), 'race has 4 cars');
 await page.waitForTimeout(1500);
-check(await page.evaluate(() => __game.state === 'racing'), 'race starts after calibration');
 const s0 = await page.evaluate(() => __game.world.player.steer);
 check(Math.abs(s0) < 0.05, 'calibrated pose (10 deg) is "straight" (steer ~ 0), got ' + s0.toFixed(3));
 
@@ -76,6 +81,7 @@ await page.click('#btn-invert');
 await page.evaluate(() => { window.__tiltDeg = 10; });
 await page.waitForTimeout(1200);
 await page.click('#btn-start');
+await page.waitForFunction(() => __game.state === 'racing', null, { timeout: 8000 });
 await page.evaluate(() => { window.__tiltDeg = 30; const c = __game.world.player; c.s = 20; c.d = 0; c.yaw = 0; });
 await page.waitForTimeout(1500);
 const inv = await page.evaluate(() => __game.world.player.d);

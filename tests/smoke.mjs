@@ -19,25 +19,33 @@ page.on('pageerror', (e) => errors.push(String(e)));
 await page.goto(url);
 await page.waitForFunction(() => window.__game, null, { timeout: 15000 });
 
+const t0 = Date.now();
 if (shots) {
-  for (const [name, s] of [['start', -6], ['curve', 330], ['cliff', 700], ['canyon', 1290], ['finish', 2860]]) {
-    await page.evaluate((s) => { const c = __game.world.player; c.s = s; c.d = 0; c.speed = 32; c.lastCheckpointS = Math.max(0, Math.floor(s / 80) * 80); }, s);
-    await page.waitForTimeout(1200);
-    await page.screenshot({ path: `${shots}/${name}.png` });
-  }
-  await page.evaluate(() => __game.newRace());
+  await page.waitForFunction(() => !document.getElementById('countdown').hidden, null, { timeout: 15000 });
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: `${shots}/countdown.png` });
+  await page.waitForFunction(() => __game.world.time > 14, null, { timeout: 60000, polling: 300 });
+  await page.screenshot({ path: `${shots}/race4.png` });
+  await page.waitForFunction(() => __game.state === 'spectate' || __game.state === 'results', null, { timeout: 120000, polling: 300 });
+  await page.waitForTimeout(500);
+  await page.screenshot({ path: `${shots}/spectate.png` });
 }
 
-const t0 = Date.now();
 await page.waitForFunction(() => !document.getElementById('result').hidden, null, { timeout: 180000, polling: 500 });
-const res = await page.evaluate(() => { const c = __game.world.player; return { time: c.finishTime, respawns: c.respawns, place: c.place }; });
+const res = await page.evaluate(() => {
+  const w = __game.world, c = w.player;
+  return { time: c.finishTime, respawns: c.respawns, place: c.place, cars: w.cars.length, finished: w.finishOrder.length,
+    botRespawns: w.cars.filter((x) => !x.isPlayer).reduce((a, x) => a + x.respawns, 0),
+    rows: document.querySelectorAll('#result-table tr').length };
+});
 if (shots) await page.screenshot({ path: `${shots}/result.png` });
 await browser.close();
 
-console.log(`race finished: ${res.time.toFixed(1)} s (sim), respawns ${res.respawns}, wall time ${((Date.now() - t0) / 1000).toFixed(0)} s`);
+console.log(`race finished: player place ${res.place} in ${res.time.toFixed(1)} s (sim), respawns ${res.respawns}/${res.botRespawns} (player/bots), results rows ${res.rows}, wall time ${((Date.now() - t0) / 1000).toFixed(0)} s`);
 const problems = [];
 if (errors.length) problems.push('console errors: ' + JSON.stringify(errors));
 if (res.time < 80 || res.time > 105) problems.push('finish time out of range 80-105');
-if (res.respawns) problems.push('respawned during autopilot race');
+if (res.respawns || res.botRespawns) problems.push('someone respawned during the autopilot race');
+if (res.cars !== 4 || res.finished !== 4 || res.rows !== 4) problems.push('expected 4 cars, all finished, 4 result rows');
 if (problems.length) { console.error('SMOKE FAILED\n' + problems.join('\n')); process.exit(1); }
 console.log('SMOKE OK');
