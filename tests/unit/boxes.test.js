@@ -67,7 +67,7 @@ describe('scattered item boxes', () => {
   });
   it('bots still collect plenty of items and every race finishes (4 seeds)', () => {
     for (const seed of [1, 2, 3, 4]) {
-      const w = createWorld({ track, seed }); w.go(false);
+      const w = createWorld({ track, seed, roller: false }); w.go(false);
       const brain = createBrain(createRng(seed + 1000), track);
       const picked = new Map();
       for (let i = 0; i < 60 * 220 && !w.done; i++) {

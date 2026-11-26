@@ -13,9 +13,9 @@ export function createCar({ id = 0, name = 'Player', color = 0xd0201c, isPlayer 
     prevTurboInput: false, turbosLeft: C.TURBO_MAX, turboRecharge: 0, turboT: 0, boostT: 0, rank: 0, vd: 0, bumpCd: {},
     item: null, rouletteT: 0, prevItemInput: false, gunShotsLeft: 0, gunCooldown: 0, shieldT: 0,
     hit: { kind: null, t: 0 }, gunSlow: 0,
-    state: 'driving', // driving | falling | respawning | finished
+    state: 'driving', // driving | falling | respawning | finished | eliminated (flattened by the roller)
     fallT: 0, respawnT: 0, invulnT: 0, lastCheckpointS: 0, stuckT: 0, wallCooldown: 0,
-    respawns: 0, offroad: false, t: 0,
+    respawns: 0, justRespawned: false, eliminatedAt: null, offroad: false, t: 0,
     finishTime: null, place: null,
   };
 }
@@ -32,7 +32,7 @@ function respawn(car) {
   car.speed = C.CRUISE_SPEED * 0.5; car.steer = 0; car.vd = 0; car.bumpCd = {};
   car.hit.kind = null; car.hit.t = 0; car.gunShotsLeft = 0;
   car.state = 'driving'; car.invulnT = C.INVULN_AFTER_RESPAWN;
-  car.stuckT = 0; car.wallCooldown = 0; car.respawns++;
+  car.stuckT = 0; car.wallCooldown = 0; car.respawns++; car.justRespawned = true;
 }
 
 function startFall(car) {
@@ -41,6 +41,7 @@ function startFall(car) {
 
 export function stepCar(car, dt, track) {
   car.t += dt;
+  if (car.state === 'eliminated') { car.speed = 0; car.vd = 0; return; }   // flattened: stays where it was
 
   if (car.state === 'respawning') {
     car.respawnT -= dt;

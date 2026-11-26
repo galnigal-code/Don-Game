@@ -1,10 +1,12 @@
-// Live ranking: finished cars first (by finish time), then the rest by distance.
+// Live ranking: finished cars first (by finish time), then cars still racing (by distance),
+// then cars the roller flattened (the one flattened LATER ranks higher).
 export function computeRanks(cars) {
+  const group = (c) => (c.finishTime != null ? 0 : c.state === 'eliminated' ? 2 : 1);
   const sorted = [...cars].sort((a, b) => {
-    const fa = a.finishTime != null, fb = b.finishTime != null;
-    if (fa && fb) return a.finishTime - b.finishTime;
-    if (fa) return -1;
-    if (fb) return 1;
+    const ga = group(a), gb = group(b);
+    if (ga !== gb) return ga - gb;
+    if (ga === 0) return a.finishTime - b.finishTime;
+    if (ga === 2) return b.eliminatedAt - a.eliminatedAt;
     return b.s - a.s;
   });
   sorted.forEach((c, i) => { c.rank = i + 1; });

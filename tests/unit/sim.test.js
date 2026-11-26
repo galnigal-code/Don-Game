@@ -157,7 +157,7 @@ describe('Car', () => {
 
 describe('full race simulation', () => {
   it('a simple driver finishes in 80-105 s without falling', () => {
-    const world = createWorld({ track, seed: 1, bots: 0 });
+    const world = createWorld({ track, seed: 1, bots: 0, roller: false });
     const car = world.player;
     let guard = 0;
     while (car.state !== 'finished' && guard++ < 60 * 200) {
@@ -172,7 +172,7 @@ describe('full race simulation', () => {
     expect(car.place).toBe(1);
   });
   it('a finished car coasts to a stop before the end of the road', () => {
-    const world = createWorld({ track, seed: 1, bots: 0 });
+    const world = createWorld({ track, seed: 1, bots: 0, roller: false });
     const car = world.player;
     for (let i = 0; i < 60 * 110; i++) { driveSimple(car, track); world.step(DT); }
     expect(car.speed).toBeLessThan(0.5);

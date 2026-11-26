@@ -163,6 +163,18 @@ export function createTrack(path = TRACK_PATH, segments = SEGMENTS, ramps = RAMP
       for (const r of ramps) if (r.gap && s > r.gap.from && s < r.gap.to) return true;
       return false;
     },
+    /** Nearest spot at or after `s` that is safe to put a car on: not on a ramp and not above a trench. */
+    safeSpawnS(s) {
+      for (let guard = 0; guard < 6; guard++) {
+        let moved = false;
+        for (const r of ramps) {
+          const end = (r.gap ? r.gap.to : r.s) + 10;
+          if (s >= r.s - r.len - 3 && s <= end) { s = end; moved = true; }
+        }
+        if (!moved) break;
+      }
+      return s;
+    },
     /** World position for track coordinates (s, d lateral, h above road). */
     toWorld(s, d, h = 0, out = {}) {
       const p = track.sample(s, scratch);

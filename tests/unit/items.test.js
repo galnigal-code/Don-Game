@@ -241,7 +241,7 @@ describe('hits', () => {
 describe('full race with items', () => {
   for (const seed of [1, 2, 3, 4]) {
     it(`seed ${seed}: bots pick up and use items, everyone still finishes`, () => {
-      const w = createWorld({ track, seed });
+      const w = createWorld({ track, seed, roller: false });
       w.go(false);
       const brain = createBrain(createRng(seed + 1000), track);
       for (let i = 0; i < 60 * 220 && !w.done; i++) { drivePlayerProxy(w.player, brain, w); w.step(DT); }

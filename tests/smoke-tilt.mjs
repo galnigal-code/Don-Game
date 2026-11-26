@@ -5,7 +5,7 @@ import { createRequire } from 'node:module';
 import { execSync } from 'node:child_process';
 
 const { chromium } = createRequire(execSync('npm root -g').toString().trim() + '/')('playwright');
-const url = (process.argv[2] || 'http://localhost:4173/Don-Game/') + '?debug=1&seed=3';
+const url = (process.argv[2] || 'http://localhost:4173/Don-Game/') + '?debug=1&seed=3&roller=0';
 const shots = process.env.SHOTS;
 
 const browser = await chromium.launch({ args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--no-sandbox'] });
@@ -140,6 +140,28 @@ await page.waitForFunction(() => __game.state === 'racing', null, { timeout: 800
 await wait(1500);
 const mir = await drive(22);
 check(mir.d > 1.5, `mirrored sensor: clockwise still drives right (d=${mir.d.toFixed(1)})`);
+
+// the roller: starts, warns, flattens the player, spectate, results
+await page.evaluate(() => { const w = __game.world; w.roller.ended = false; for (const c of w.cars) { c.s = 900 + (c.isPlayer ? 0 : 25 * c.id); c.d = 0; c.speed = 30; c.state = 'driving'; } });
+await page.waitForFunction(() => __game.world.roller.active, null, { timeout: 15000 }).catch(() => {});
+check(await page.evaluate(() => __game.world.roller.active), 'the roller appears once the leader passes a quarter of the track');
+check(await page.evaluate(() => document.getElementById('toast').textContent.includes('המכבש') ), 'the player is told: the roller is out');
+check(await page.evaluate(() => !document.querySelector('#hud-dots .rdot').hidden), 'the roller shows on the progress bar');
+check(await page.evaluate(() => __game.rollerView.root.visible), 'the roller model is drawn');
+await page.evaluate(() => { const w = __game.world; w.roller.s = w.player.s - 30; w.roller.speed = 10; });
+await wait(500);
+check(await page.evaluate(() => Number(getComputedStyle(document.getElementById('danger')).opacity) > 0.2), 'a red warning frame appears when the roller is close');
+await page.evaluate(() => { const w = __game.world; w.roller.s = w.player.s - 1; });
+await wait(900);
+check(await page.evaluate(() => __game.world.player.state === 'eliminated' && __game.state === 'spectate'), 'the roller flattens the player and the game switches to spectating');
+check(await page.evaluate(() => document.getElementById('spectate-banner').textContent.includes('נדרסת') && document.querySelector('#hud-pos b').textContent === '✕'), 'banner says the player was flattened and the position shows a cross');
+check(await page.evaluate(() => __game.views[0].root.scale.y < 0.3), 'the flattened car is squashed flat');
+check(await page.evaluate(() => Number(getComputedStyle(document.getElementById('danger')).opacity) === 0), 'the warning frame is gone');
+await page.click('#btn-skip');
+await page.waitForFunction(() => !document.getElementById('result').hidden, null, { timeout: 60000 });
+check(await page.evaluate(() => document.getElementById('result-title').textContent.includes('נדרסת')), 'the results screen says the player was flattened');
+check(await page.evaluate(() => [...document.querySelectorAll('#result-table tr')].some((r) => r.classList.contains('me') && r.textContent.includes('נדרס'))), 'the player row shows "flattened" instead of a time');
+check(await page.evaluate(() => __game.world.finalOrder().length === 4 && __game.world.finalOrder().every((c) => c.place >= 1)), 'everyone has a final place');
 
 check(errors.length === 0, 'no console errors' + (errors.length ? ': ' + JSON.stringify(errors) : ''));
 await browser.close();

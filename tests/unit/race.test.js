@@ -11,7 +11,7 @@ const track = createTrack();
 const DT = CONFIG.sim.STEP;
 
 function runRace(seed, { turboPlayer = true, maxSeconds = 200 } = {}) {
-  const w = createWorld({ track, seed });
+  const w = createWorld({ track, seed, roller: false });
   w.go(false);
   const brain = createBrain(createRng(seed + 1000), track);
   for (let i = 0; i < maxSeconds * 60 && !w.done; i++) {
@@ -86,7 +86,7 @@ describe('full race with 3 bots', () => {
     expect(w2.player.s).toBeGreaterThan(w1.player.s + 8);
   });
   it('forces stragglers to finish 60 s after the player', () => {
-    const w = createWorld({ track, seed: 1 });
+    const w = createWorld({ track, seed: 1, roller: false });
     w.player.s = track.finishS - 1; w.player.speed = 32;
     for (const [car] of w.brains) { car.input.speedMult = 0; }
     let n = 0;

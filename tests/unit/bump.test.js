@@ -171,7 +171,7 @@ describe('whole races with the new collisions', () => {
   it('everyone still finishes in 70-110 s and collisions actually happen', () => {
     let bumps = 0, respawns = 0, shoves = 0;
     for (const seed of [1, 2, 3, 4, 5, 6]) {
-      const w = createWorld({ track, seed }); w.go(false);
+      const w = createWorld({ track, seed, roller: false }); w.go(false);
       const brain = createBrain(createRng(seed + 1000), track);
       for (let i = 0; i < 60 * 220 && !w.done; i++) {
         drivePlayerProxy(w.player, brain, w); w.step(DT);

@@ -148,3 +148,14 @@ button.big:disabled { opacity: .4; }
 #build { position: absolute; bottom: calc(4px + var(--safe-b)); right: calc(8px + var(--safe-r)); font-size: 10px; opacity: .55; direction: rtl; pointer-events: none; z-index: 29; text-shadow: none; }
 #btn-update { position: absolute; top: calc(8px + var(--safe-t)); left: 50%; transform: translateX(-50%); z-index: 40; pointer-events: auto; font: inherit; font-weight: 700; font-size: clamp(13px, 3.6vmin, 18px);
   padding: 8px 16px; border-radius: 12px; border: 0; background: #ffd23f; color: #3a2400; touch-action: manipulation; }
+
+/* ---- the roller ---- */
+#danger { position: absolute; inset: 0; pointer-events: none; opacity: 0; --dur: 1s;
+  background: radial-gradient(ellipse at center, rgba(255,0,0,0) 45%, rgba(255,20,20,.55) 85%, rgba(200,0,0,.85) 100%); }
+#danger.on { animation: dangerpulse var(--dur) ease-in-out infinite alternate; }
+@keyframes dangerpulse { from { filter: brightness(.7); } to { filter: brightness(1.35); } }
+@media (prefers-reduced-motion: reduce) { #danger.on { animation: none; } }
+#ui.hud-hidden #danger { display: none; }
+#hud-dots .rdot { position: absolute; top: 50%; margin: -11px 0 0 -11px; font-size: 18px; line-height: 1; z-index: 3; text-shadow: 0 0 4px #000; font-style: normal; filter: drop-shadow(0 0 3px #f00); }
+#standings .row.out { opacity: .55; }
+#result-title.flat { color: #ff8a70; }

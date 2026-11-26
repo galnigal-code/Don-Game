@@ -111,6 +111,35 @@ export class Sound {
     this.tone(190 + Math.min(strength, 25) * 4, 0.1, { type: 'square', vol: 0.12 * k, slideTo: 110 });
     this.tone(1250, 0.05, { type: 'triangle', vol: 0.07 * k });
   }
+  /** The roller has started: two-tone siren plus a deep boom. */
+  warn() {
+    for (let i = 0; i < 4; i++) this.tone(i % 2 ? 640 : 880, 0.2, { type: 'square', vol: 0.16, delay: i * 0.22 });
+    this.tone(70, 0.8, { type: 'sine', vol: 0.35, slideTo: 40, delay: 0.1 });
+    this.noise(0.7, { vol: 0.3, from: 400, to: 60 });
+  }
+  /** Cartoon squash: a wet crunch and a falling "boing". */
+  squash(vol = 1) {
+    this.noise(0.35, { vol: 0.45 * vol, from: 900, to: 90 });
+    this.tone(300, 0.45, { type: 'sine', vol: 0.3 * vol, slideTo: 60 });
+    this.tone(160, 0.3, { type: 'square', vol: 0.12 * vol, slideTo: 50, delay: 0.05 });
+  }
+  /** Beep that gets more urgent when the roller is close (call a few times a second while in danger). */
+  dangerPing(k = 0.5) { this.tone(900 + 500 * k, 0.07, { type: 'square', vol: 0.1 + 0.1 * k }); }
+  /** Continuous rumble of the roller engine; vol 0..1 by distance. Call every frame. */
+  rollerRumble(vol, on) {
+    if (!this.ctx) return;
+    if (!this.rum) {
+      const c = this.ctx;
+      const src = c.createBufferSource(); src.buffer = this.noiseBuf; src.loop = true;
+      const f = c.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 110; f.Q.value = 3;
+      const g = c.createGain(); g.gain.value = 0;
+      const osc = c.createOscillator(); osc.type = 'sawtooth'; osc.frequency.value = 38;
+      const og = c.createGain(); og.gain.value = 0.35;
+      osc.connect(og); og.connect(f); src.connect(f); f.connect(g); g.connect(this.sfxBus); src.start(); osc.start();
+      this.rum = { g };
+    }
+    this.rum.g.gain.setTargetAtTime(on ? Math.min(0.55, 0.55 * vol) : 0, this.ctx.currentTime, 0.15);
+  }
   bump() { this.noise(0.15, { vol: 0.3, from: 700, to: 120 }); this.tone(90, 0.12, { type: 'sine', vol: 0.25 }); }
   fall() { this.tone(600, 0.9, { type: 'sine', vol: 0.18, slideTo: 80 }); }
   respawn() { this.tone(300, 0.12, { vol: 0.14, type: 'triangle' }); this.tone(450, 0.12, { vol: 0.14, delay: 0.1, type: 'triangle' }); this.tone(600, 0.18, { vol: 0.14, delay: 0.2, type: 'triangle' }); }

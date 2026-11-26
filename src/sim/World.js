@@ -5,6 +5,7 @@ import { createCar, stepCar } from './Car.js';
 import { createBrain, driveBot } from './BotDriver.js';
 import { resolveCarCollisions } from './collisions.js';
 import { computeRanks } from './race.js';
+import { createRoller, stepRoller, placeAheadOfRoller } from './roller.js';
 import { FIXED_OBSTACLES } from './trackData.js';
 import { generateBoxes } from './boxLayout.js';
 import { useItem, stepGun, stepBoxes } from './items.js';
@@ -19,7 +20,8 @@ function shuffle(arr, rng) {
   return arr;
 }
 
-export function createWorld({ track, seed = 1, bots = 3 } = {}) {
+/** roller: false switches the giant roller off (for tests of everything else). */
+export function createWorld({ track, seed = 1, bots = 3, roller = true } = {}) {
   const rng = createRng(seed);
   const slots = shuffle(GRID.slice(), rng);
   const names = shuffle(BOT_NAMES.slice(), rng);
@@ -40,7 +42,8 @@ export function createWorld({ track, seed = 1, bots = 3 } = {}) {
     track, rng, time: 0, cars, player, brains,
     entities: fixed, boxes: generateBoxes(track, createRng(seed * 7919 + 13)),   // separate rng: the layout must not disturb the bots' randomness
     events: [], entityId: fixed.length, stats: { pickups: 0, uses: 0, hits: 0, bumps: 0 },
-    finishOrder: [], leaderS: 0, sincePlayerFinish: 0, ranked: computeRanks(cars),
+    roller: Object.assign(createRoller(), roller ? {} : { ended: true }), eliminated: [],
+    finishOrder: [], leaderS: 0, sincePlayerOut: 0, ranked: computeRanks(cars),
 
     /** Race start: the player may get the start boost; some bots always may. */
     go(playerBoost = false) {
@@ -55,14 +58,17 @@ export function createWorld({ track, seed = 1, bots = 3 } = {}) {
       world.ranked = computeRanks(cars);
       world.leaderS = world.ranked[0].s;
       for (const [car, brain] of brains) {
-        if (car.state === 'finished') continue;
+        if (car.state === 'finished' || car.state === 'eliminated') continue;
         driveBot(car, brain, world);
         // rubber band (friendly to the player): a bot that leads eases off strongly, one that trails
         // pushes only a little. Off once the player is done.
         let rb = 1;
-        if (player.state !== 'finished') {
+        const playerOut = player.state === 'finished' || player.state === 'eliminated';
+        if (!playerOut) {
           const x = Math.max(-1, Math.min(1, (car.s - player.s) / CONFIG.bots.RUBBER_RANGE)); // + = bot ahead
           rb = x > 0 ? 1 - x * CONFIG.bots.RUBBER_SLOW_MAX : 1 - x * CONFIG.bots.RUBBER_BOOST_MAX;
+          // never slow a bot down when the roller is right behind it
+          if (world.roller.active && car.s - world.roller.s < CONFIG.roller.NO_SLOWDOWN_DIST) rb = Math.max(rb, 1);
         }
         car.input.speedMult = brain.skill * rb;
       }
@@ -80,23 +86,32 @@ export function createWorld({ track, seed = 1, bots = 3 } = {}) {
           car.place = world.finishOrder.length;
         }
       }
+      for (const car of cars) if (car.justRespawned) { car.justRespawned = false; placeAheadOfRoller(world, car); }
+      stepRoller(world, dt);
       stepEntities(world, dt);
       stepBoxes(world, dt);
       resolveCarCollisions(cars, { world });
       world.ranked = computeRanks(cars);
 
-      // safety net: nobody should be stuck for long after the player is done
-      if (player.state === 'finished') {
-        world.sincePlayerFinish += dt;
-        if (world.sincePlayerFinish > CONFIG.race.FORCE_FINISH_AFTER) {
-          for (const car of world.ranked) if (car.finishTime == null) {
+      // safety net: nobody should be stuck for long after the player is done (finished or flattened)
+      if (player.state === 'finished' || player.state === 'eliminated') {
+        world.sincePlayerOut += dt;
+        if (world.sincePlayerOut > CONFIG.race.FORCE_FINISH_AFTER) {
+          for (const car of world.ranked) if (car.finishTime == null && car.state !== 'eliminated') {
             car.state = 'finished'; car.s = track.finishS; car.speed = 0; car.finishTime = world.time;
             world.finishOrder.push(car); car.place = world.finishOrder.length;
           }
         }
       }
     },
-    get done() { return world.finishOrder.length === cars.length; },
+    get done() { return world.finishOrder.length + world.eliminated.length === cars.length; },
+    /** Final standing: finishers by time, then the flattened (the later one is better). Sets `place` on everyone. */
+    finalOrder() {
+      const flat = [...world.eliminated].sort((a, b) => b.eliminatedAt - a.eliminatedAt);
+      const all = [...world.finishOrder, ...flat];
+      all.forEach((c, i) => { c.place = i + 1; });
+      return all;
+    },
   };
   return world;
 }

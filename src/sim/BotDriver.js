@@ -31,6 +31,7 @@ export function createBrain(rng, track, lane = null) {
     dodge: new Map(),                 // entity id -> will this bot avoid it? (decided once, DODGE_SUCCESS)
     aggression: 0.2 + rng() * 0.5,    // how often it leans into a car next to it
     nudgeUntil: 0, nudgeCar: null, overtakeSkill: new Map(),
+    alert: rng() < 0.5,                // does this bot notice the roller and use a turbo to flee? (the player gets warnings, so the proxy always does)
     heldItem: null, heldSince: 0, useDelay: 0.4 + rng() * 0.8,
   };
 }
@@ -98,9 +99,11 @@ function nudge(car, brain, world, target, here, hw) {
 }
 
 /** Use a turbo when one is charged: at planned spots along the track, or right away when far behind. */
-export function driveTurbo(car, brain, world) {
+export function driveTurbo(car, brain, world, alert = brain.alert) {
   car.input.turbo = false;
   if (car.state !== 'driving' || car.turbosLeft <= 0 || car.turboT > 0) return;
+  const panic = world.roller.active && car.s - world.roller.s < CONFIG.roller.TURBO_PANIC_DIST;      // the roller is close: use it now
+  if (panic && alert) { car.input.turbo = true; return; }
   const behind = car.rank === world.cars.length && car.s > 200 && world.leaderS - car.s > 60;
   if (car.s >= brain.nextTurboAt || behind) {
     car.input.turbo = true;
@@ -153,6 +156,7 @@ export function driveItems(car, brain, world) {
     case 'gun': use = !!ahead && Math.abs(ahead.d - car.d) < 2; break;
     case 'mine': case 'oil': case 'barrel': use = !!behind || held > 8; break;
     case 'shield': {
+      if (world.roller.active && car.s - world.roller.s < 50) return;       // a shield does not stop the roller: keep it
       const incoming = world.entities.some((e) => e.type === 'missile' && e.alive && e.ownerId !== car.id
         && e.s < car.s && car.s - e.s < 60 && (e.targetId === car.id || Math.abs(e.d - car.d) < 4));
       use = incoming || held > 10;
@@ -166,5 +170,5 @@ export function driveItems(car, brain, world) {
 export function drivePlayerProxy(car, brain, world, { turbo = true } = {}) {
   driveSimple(car, world.track, avoidAndCollect(car, brain, world, 0));
   driveItems(car, brain, world);
-  if (turbo) driveTurbo(car, brain, world); else car.input.turbo = false;
+  if (turbo) driveTurbo(car, brain, world, true); else car.input.turbo = false;
 }

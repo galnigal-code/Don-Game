@@ -36,7 +36,7 @@ export function applyHit(car, kind, world) {
 function nearestAhead(car, cars) {
   let best = null;
   for (const c of cars) {
-    if (c === car || c.state === 'finished' || c.s <= car.s) continue;
+    if (c === car || c.state === 'finished' || c.state === 'eliminated' || c.s <= car.s) continue;
     if (!best || c.s < best.s) best = c;
   }
   return best;
@@ -68,7 +68,7 @@ export function useItem(car, world) {
 /** Guns fire a burst of bullets straight ahead. */
 export function stepGun(car, world, dt) {
   if (car.gunShotsLeft <= 0) return;
-  if (car.state === 'falling' || car.state === 'respawning') { car.gunShotsLeft = 0; return; }
+  if (car.state === 'falling' || car.state === 'respawning' || car.state === 'eliminated') { car.gunShotsLeft = 0; return; }
   car.gunCooldown -= dt;
   if (car.gunCooldown > 0) return;
   car.gunShotsLeft--; car.gunCooldown = CONFIG.items.GUN_INTERVAL;

@@ -11,8 +11,10 @@ import { CameraRig } from '../render/CameraRig.js';
 import { EntityViews } from '../render/EntityViews.js';
 import { Effects } from '../render/Effects.js';
 import { Particles } from '../render/Particles.js';
+import { createRollerModel } from '../render/RollerModel.js';
 import { buildEnvironment } from '../render/Environment.js';
 import { QualityController, LEVELS, initialLevel } from '../render/quality.js';
+import { distanceGain } from '../audio/soundMath.js';
 import { KeyboardInput } from '../input/KeyboardInput.js';
 import { TouchSteerTemp } from '../input/TouchSteerTemp.js';
 import { TiltInput } from '../input/TiltInput.js';
@@ -46,6 +48,9 @@ export class Game {
     this.entityViews = new EntityViews(this.scene, this.track);
     this.effects = new Effects(this.scene);
     this.particles = new Particles(this.scene);
+    this.rollerView = createRollerModel();
+    this.scene.add(this.rollerView.root);
+    this.rollerSmokeAcc = 0; this.pingAcc = 0; this.lastDangerVibrate = 0;
     this.emitAcc = new Map();
     this.v3 = new THREE.Vector3();
 
@@ -72,6 +77,7 @@ export class Game {
     const flip = document.createElement('button');
     flip.id = 'btn-flip'; flip.textContent = '↔'; flip.setAttribute('aria-label', 'הפוך כיוון היגוי');
     const toast = document.createElement('div'); toast.id = 'toast';
+    this.toastEl = toast;
     flip.addEventListener('pointerdown', (e) => {
       e.preventDefault(); this.tilt.flipDirection();
       toast.textContent = 'כיוון ההיגוי הוחלף'; toast.classList.add('on');
@@ -182,7 +188,7 @@ export class Game {
   newRace() {
     for (const v of this.views) { this.scene.remove(v.root); this.scene.remove(v.blob); }
     const seed = this.fixedSeed ?? ((Math.random() * 1e9) | 0);
-    this.world = createWorld({ track: this.track, seed });
+    this.world = createWorld({ track: this.track, seed, roller: this.params.get('roller') !== '0' });   // ?roller=0 switches the roller off (tests)
     this.autoBrain = createBrain(createRng(seed + 1000), this.track);   // used by ?autopilot=1
     this.entityViews.setWorld(this.world);
     this.views = this.world.cars.map((car) => {
@@ -264,13 +270,13 @@ export class Game {
       if (this.acc > STEP) this.acc = 0;
     }
     const w = this.world, p = w.player;
-    if (this.state === 'racing' && p.state === 'finished') this.enterSpectate();
+    if (this.state === 'racing' && (p.state === 'finished' || p.state === 'eliminated')) this.enterSpectate();
     if ((this.state === 'spectate' || this.state === 'racing') && w.done) this.enterResults();
   }
 
   simStep() {
     const w = this.world, car = w.player;
-    if (car.state !== 'finished') {
+    if (car.state !== 'finished' && car.state !== 'eliminated') {
       if (this.autopilot) drivePlayerProxy(car, this.autoBrain, w);
       else {
         const kb = this.keyboard.update(STEP);
@@ -286,8 +292,9 @@ export class Game {
   enterSpectate() {
     this.state = 'spectate';
     const p = this.world.player;
-    this.sound.finish(p.place === 1);
-    this.hud.setSpectate(true, p.place === 1 ? 'סיימת ראשון! 🏆' : `סיימת במקום ${p.place}`);
+    if (p.state === 'eliminated') this.hud.setSpectate(true, 'נדרסת! 🫓 צופים בשאר המרוץ');
+    else { this.sound.finish(p.place === 1); this.hud.setSpectate(true, p.place === 1 ? 'סיימת ראשון! 🏆' : `סיימת במקום ${p.place}`); }
+    this.hud.setDanger(0);
     this.pickSpectate(true);
   }
 
@@ -295,7 +302,8 @@ export class Game {
     this.state = 'results';
     this.sound.stopMusic();
     this.hud.setSpectate(false);
-    this.hud.showResults(this.world.finishOrder, this.world.player);
+    this.hud.setDanger(0);
+    this.hud.showResults(this.world.finalOrder(), this.world.player);
     this.skipping = false;
   }
 
@@ -303,19 +311,58 @@ export class Game {
   pickSpectate(force = false) {
     const cars = this.world.ranked;
     const cur = cars.find((c) => c.id === this.specId);
-    if (!force && cur && cur.state !== 'finished') return;
-    const next = cars.find((c) => c.state !== 'finished') || cars[0];
+    const out = (c) => c.state === 'finished' || c.state === 'eliminated';
+    if (!force && cur && !out(cur)) return;
+    const next = cars.find((c) => !out(c)) || cars[0];
     if (next.id !== this.specId) { this.specId = next.id; this.rig.reset(); }
   }
   cycleSpectate() {
-    const open = this.world.ranked.filter((c) => c.state !== 'finished');
+    const open = this.world.ranked.filter((c) => c.state !== 'finished' && c.state !== 'eliminated');
     if (open.length < 2) return;
     const i = open.findIndex((c) => c.id === this.specId);
     this.specId = open[(i + 1) % open.length].id;
     this.rig.reset();
   }
 
+  showToast(text, ms = 1400) {
+    const t = this.toastEl; if (!t) return;
+    t.textContent = text; t.classList.add('on');
+    clearTimeout(this.toastT); this.toastT = setTimeout(() => t.classList.remove('on'), ms);
+  }
+
   /* ---------- drawing ---------- */
+
+  /** The roller: model, rumble, smoke and the warnings for the player. */
+  updateRoller(dt, target, player) {
+    const T = this.track, roller = this.world.roller, rv = this.rollerView;
+    if (!roller.active) { rv.root.visible = false; this.sound.rollerRumble(0, false); if (this.state !== 'results') this.hud.setDanger(0); return; }
+    const sm = T.sample(roller.s - 1.5, this.tmpSample);
+    T.toWorld(roller.s - 1.5, 0, 0, this.tmpWorld);
+    rv.root.visible = true;
+    rv.root.position.set(this.tmpWorld.x, this.tmpWorld.y, this.tmpWorld.z);
+    rv.root.rotation.set(Math.atan2(sm.ty, Math.hypot(sm.tx, sm.tz)), -sm.heading, 0, 'YXZ');
+    rv.update(Math.min(20, sm.halfWidth * 2 + 1.2), roller.speed, dt, this.world.time);
+    // smoke from the chimney
+    this.rollerSmokeAcc += dt * 14;
+    while (this.rollerSmokeAcc >= 1) {
+      this.rollerSmokeAcc -= 1;
+      rv.root.updateMatrixWorld(true);
+      this.v3.copy(rv.chimney); rv.root.localToWorld(this.v3);
+      this.particles.emit(this.v3.x, this.v3.y, this.v3.z, (Math.random() - 0.5) * 1.2, 3 + Math.random() * 2, (Math.random() - 0.5) * 1.2,
+        { size: 0.9, life: 1.4, color: 0x4a4a4a, alpha: 0.55, grow: 3, drag: 0.6, up: 1 });
+    }
+    // rumble: louder the closer it is to what the camera follows
+    this.sound.rollerRumble(distanceGain(Math.abs(target.s - roller.s), 25, 160), true);
+    // warnings for the player (while still racing)
+    if (this.state === 'racing' && player.state === 'driving') {
+      const d = player.s - roller.s, R = CONFIG.roller;
+      const k = Math.max(0, Math.min(1, (R.DANGER_DIST - d) / (R.DANGER_DIST - 15)));
+      this.hud.setDanger(k);
+      const now = performance.now();
+      if (d < R.VIBRATE_DIST && now - this.lastDangerVibrate > 900) { this.lastDangerVibrate = now; navigator.vibrate?.(35); }
+      if (k > 0.35) { this.pingAcc += dt * (2 + 5 * k); if (this.pingAcc >= 1) { this.pingAcc = 0; this.sound.dangerPing(k); } }
+    } else if (this.state !== 'racing') this.hud.setDanger(0);
+  }
 
   /** Engine loop and one-shot sounds that follow the player's state changes. */
   frameSounds(player, target) {
@@ -371,7 +418,17 @@ export class Game {
     const T = this.track, p = this.world.player, tmp = this.tmpWorld;
     const dist = (s) => Math.abs(s - target.s);
     for (const e of evs) {
-      if (e.type === 'explosion') {
+      if (e.type === 'roller-start') {
+        this.showToast('⚠️ המכבש יצא לדרך! אל תעצרו', 2600);
+        this.sound.warn(); this.rig.shake(0.2); navigator.vibrate?.([80, 60, 80]);
+      } else if (e.type === 'flattened') {
+        const c = this.world.cars.find((x) => x.id === e.carId);
+        this.sound.at(dist(e.s), (v) => this.sound.squash(v));
+        T.toWorld(e.s, e.d, 0.4, tmp);
+        for (let q = 0; q < 10; q++) this.particles.emit(tmp.x, tmp.y, tmp.z, (Math.random() - 0.5) * 8, 0.5 + Math.random() * 2, (Math.random() - 0.5) * 8,
+          { size: 0.7 + Math.random() * 0.6, life: 0.7, color: 0xb9a58c, alpha: 0.6, grow: 2, drag: 2.5, up: 0.5 });
+        if (c === p) { navigator.vibrate?.([60, 40, 140]); this.rig.shake(0.35); }
+      } else if (e.type === 'explosion') {
         this.sound.at(dist(e.s), this.sound.explosion);
         T.toWorld(e.s, e.d, 0.8, tmp);
         this.effects.explosion(tmp.x, tmp.y, tmp.z);
@@ -431,6 +488,12 @@ export class Game {
       v.shield.visible = car.shieldT > 0 && (car.shieldT > 1 || Math.floor(car.t * 8) % 2 === 0);
       for (const w of v.wheels) w.rotation.x -= (car.speed * dt) / 0.4;
       let visible = car.state !== 'respawning';
+      // flattened by the roller: squash to a thin pancake, stay a few seconds, then disappear
+      if (car.state === 'eliminated') {
+        const t = this.world.time - car.eliminatedAt, k = Math.min(1, t / CONFIG.roller.FLATTEN_TIME);
+        v.root.scale.set(1 + 0.35 * k, 1 - 0.88 * k, 1 + 0.35 * k);
+        visible = t < 3.5;
+      } else if (v.root.scale.y !== 1) v.root.scale.set(1, 1, 1);
       if (car.invulnT > 0) visible = visible && Math.floor(car.t * 10) % 2 === 0;
       v.root.visible = visible;
       // blob shadow stays on the ground (below jumps), fades with height
@@ -466,8 +529,9 @@ export class Game {
     this.effects.update(dt);
     this.frameSounds(player, target);
     this.particles.update(dt, this.camera, this.renderer.domElement.height);
-    this.hud.update({ car: player, cars: w.cars, length: this.track.finishS });
+    this.hud.update({ car: player, cars: w.cars, length: this.track.finishS, roller: w.roller });
     if (this.state === 'spectate') this.hud.updateStandings(w.ranked, this.specId);
+    this.updateRoller(dt, target, player);
     this.env.update(this.camera);
     const t1 = performance.now();
     this.renderer.render(this.scene, this.camera);

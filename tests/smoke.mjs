@@ -7,8 +7,9 @@ const requireGlobal = createRequire(execSync('npm root -g').toString().trim() + 
 const { chromium } = requireGlobal('playwright');
 
 const base = process.argv[2] || 'http://localhost:4173/Don-Game/';
-const url = `${base}?autopilot=1&fast=4&seed=1&debug=1`;
+const url = `${base}?autopilot=1&fast=4&seed=1&debug=1&roller=0`;     // the roller has its own scenarios below and in smoke-tilt
 const shots = process.env.SHOTS;
+const problems = [];
 
 const browser = await chromium.launch({ args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--no-sandbox'] });
 const page = await browser.newPage({ viewport: { width: 844, height: 390 } });
@@ -39,10 +40,27 @@ const res = await page.evaluate(() => {
     rows: document.querySelectorAll('#result-table tr').length, stats: w.stats };
 });
 if (shots) await page.screenshot({ path: `${shots}/result.png` });
+
+// ---- a full autopilot race WITH the roller: it must always end, with every car either finished or flattened ----
+{
+  const errs2 = [];
+  const p2 = await browser.newPage({ viewport: { width: 844, height: 390 } });
+  p2.on('console', (m) => { if (m.type() === 'error') errs2.push(m.text()); });
+  p2.on('pageerror', (e) => errs2.push(String(e)));
+  for (const seed of [3, 7]) {
+    await p2.goto(`${base}?autopilot=1&fast=4&seed=${seed}&quality=1`);
+    await p2.waitForFunction(() => window.__game, null, { timeout: 15000 });
+    await p2.waitForFunction(() => !document.getElementById('result').hidden, null, { timeout: 180000, polling: 500 });
+    const r = await p2.evaluate(() => { const w = __game.world; return { finished: w.finishOrder.length, flat: w.eliminated.length, rows: document.querySelectorAll('#result-table tr').length, rollerSeen: w.roller.startedAt !== null || w.roller.ended, title: document.getElementById('result-title').textContent }; });
+    console.log(`roller race seed ${seed}: finished ${r.finished}, flattened ${r.flat}, rows ${r.rows}, roller ran ${r.rollerSeen}, title "${r.title}"`);
+    if (r.finished + r.flat !== 4 || r.rows !== 4 || !r.rollerSeen) problems.push(`roller race seed ${seed} did not end properly: ` + JSON.stringify(r));
+  }
+  if (errs2.length) problems.push('console errors in the roller races: ' + JSON.stringify(errs2));
+  await p2.close();
+}
 await browser.close();
 
 console.log(`race finished: player place ${res.place} in ${res.time.toFixed(1)} s (sim), respawns ${res.respawns}/${res.botRespawns} (player/bots), results rows ${res.rows}, items ${JSON.stringify(res.stats)}, wall time ${((Date.now() - t0) / 1000).toFixed(0)} s`);
-const problems = [];
 if (errors.length) problems.push('console errors: ' + JSON.stringify(errors));
 if (res.time < 72 || res.time > 105) problems.push('finish time out of range 72-105');
 if (res.respawns + res.botRespawns > 3) problems.push('too many respawns during the autopilot race: ' + (res.respawns + res.botRespawns));
