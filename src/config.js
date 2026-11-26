@@ -25,7 +25,9 @@ export const CONFIG = {
   // scattered item boxes (V2-A): groups of 1-2, random lateral position, new layout every race
   boxes: { FIRST_S: 150, LAST_MARGIN: 80, GAP_MIN: 80, GAP_MAX: 170, PAIR_CHANCE: 0.3, PAIR_SPREAD_S: 6, PAIR_MIN_D: 3.5, WALL_MARGIN: 2.5, CLIFF_MARGIN: 4, RAMP_CLEAR: 25, OBSTACLE_CLEAR: 4, ATTEMPTS: 8 },
   // the giant roller (V2-C): chases the pack from 25 % of the track, full road width, flattens (eliminates) what it catches
-  roller: { START_FRACTION: 0.25, SPAWN_BEHIND: 55, START_SPEED_FRAC: 0.6, SPEED_START: 1.12, SPEED_END: 1.18, ACCEL: 4, REACH: 1.0, RESPAWN_AHEAD: 30, DANGER_DIST: 60, VIBRATE_DIST: 25, FLATTEN_TIME: 0.25, MERCY_DIST: 35, MERCY_FACTOR: 0.92, TURBO_PANIC_DIST: 70, NO_SLOWDOWN_DIST: 100 },
+  // SHELVED (user cancelled the roller on 26.11.2026: it cannot be seen coming with a chase camera). Kept, tested and switched off;
+  // set ENABLED: true or use ?roller=1 to bring it back.
+  roller: { ENABLED: false, START_FRACTION: 0.25, SPAWN_BEHIND: 55, START_SPEED_FRAC: 0.6, SPEED_START: 1.12, SPEED_END: 1.18, ACCEL: 4, REACH: 1.0, RESPAWN_AHEAD: 30, DANGER_DIST: 60, VIBRATE_DIST: 25, FLATTEN_TIME: 0.25, MERCY_DIST: 35, MERCY_FACTOR: 0.92, TURBO_PANIC_DIST: 70, NO_SLOWDOWN_DIST: 100 },
   bots: { OVERTAKE_DIST: 18, OVERTAKE_SKILL: 0.9, NUDGE_RATE: 0.8, NUDGE_TIME: 0.6, RUBBER_RANGE: 250, RUBBER_SLOW_MAX: 0.2, RUBBER_BOOST_MAX: 0.08, DODGE_SUCCESS: 0.7 },
   tilt: { PLANAR_MIN: 3, DIRECTION_TEST_DEG: 12, DEAD_ZONE_DEG: 3, MAX_ANGLE_DEG: { low: 38, normal: 30, high: 22 }, SMOOTH_TAU: 0.06, INVERT: false },
   render: { MAX_PIXEL_RATIO: 1.5, FOG_NEAR: 120, FOG_FAR: 650, SHADOW_SIZE: 1024 },

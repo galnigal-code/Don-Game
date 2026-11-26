@@ -15,7 +15,7 @@ const R = CONFIG.roller;
 
 /** A world with hand-placed cars; only the roller is stepped (cars stay where they are). */
 function arena(positions) {
-  const w = createWorld({ track, seed: 1, bots: 0 });
+  const w = createWorld({ track, seed: 1, bots: 0, roller: true });
   w.cars.length = 0;
   w.cars.push(...positions.map((s, i) => { const c = createCar({ id: i, s, isPlayer: i === 0 }); c.speed = 30; return c; }));
   w.player = w.cars[0];
@@ -40,9 +40,10 @@ describe('start', () => {
     stepRollerFor(w, 1);
     expect(w.events.filter((e) => e.type === 'roller-start')).toHaveLength(1);       // only once
   });
-  it('can be switched off', () => {
-    const w = createWorld({ track, seed: 1, roller: false });
-    expect(w.roller.ended).toBe(true);
+  it('can be switched off, and IS off by default (the roller is shelved)', () => {
+    expect(createWorld({ track, seed: 1, roller: false }).roller.ended).toBe(true);
+    expect(CONFIG.roller.ENABLED).toBe(false);
+    expect(createWorld({ track, seed: 1 }).roller.ended).toBe(true);
   });
 });
 
@@ -224,7 +225,7 @@ describe('whole races (40, with the player proxy)', () => {
   it('everyone finishes or is flattened, the roller is a real threat, the careful player rarely loses', () => {
     let flattened = 0, races1 = 0, playerOut = 0, ended = 0;
     for (let seed = 1; seed <= 40; seed++) {
-      const w = createWorld({ track, seed }); w.go(false);
+      const w = createWorld({ track, seed, roller: true }); w.go(false);
       const brain = createBrain(createRng(seed + 1000), track);
       for (let i = 0; i < 60 * 200 && !w.done; i++) { drivePlayerProxy(w.player, brain, w); w.step(DT); }
       if (w.done) ended++;

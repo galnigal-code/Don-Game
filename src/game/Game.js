@@ -188,7 +188,7 @@ export class Game {
   newRace() {
     for (const v of this.views) { this.scene.remove(v.root); this.scene.remove(v.blob); }
     const seed = this.fixedSeed ?? ((Math.random() * 1e9) | 0);
-    this.world = createWorld({ track: this.track, seed, roller: this.params.get('roller') !== '0' });   // ?roller=0 switches the roller off (tests)
+    this.world = createWorld({ track: this.track, seed, roller: this.params.has('roller') ? this.params.get('roller') === '1' : CONFIG.roller.ENABLED });   // shelved: ?roller=1 brings it back (tests)
     this.autoBrain = createBrain(createRng(seed + 1000), this.track);   // used by ?autopilot=1
     this.entityViews.setWorld(this.world);
     this.views = this.world.cars.map((car) => {

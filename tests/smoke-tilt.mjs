@@ -5,7 +5,7 @@ import { createRequire } from 'node:module';
 import { execSync } from 'node:child_process';
 
 const { chromium } = createRequire(execSync('npm root -g').toString().trim() + '/')('playwright');
-const url = (process.argv[2] || 'http://localhost:4173/Don-Game/') + '?debug=1&seed=3&roller=0';
+const url = (process.argv[2] || 'http://localhost:4173/Don-Game/') + '?debug=1&seed=3';
 const shots = process.env.SHOTS;
 
 const browser = await chromium.launch({ args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--no-sandbox'] });

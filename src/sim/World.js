@@ -20,8 +20,8 @@ function shuffle(arr, rng) {
   return arr;
 }
 
-/** roller: false switches the giant roller off (for tests of everything else). */
-export function createWorld({ track, seed = 1, bots = 3, roller = true } = {}) {
+/** roller: the giant roller is shelved (CONFIG.roller.ENABLED = false); pass true to run it (its own tests do). */
+export function createWorld({ track, seed = 1, bots = 3, roller = CONFIG.roller.ENABLED } = {}) {
   const rng = createRng(seed);
   const slots = shuffle(GRID.slice(), rng);
   const names = shuffle(BOT_NAMES.slice(), rng);
