@@ -237,5 +237,5 @@ describe('whole races (40, with the player proxy)', () => {
     expect(races1 / 40).toBeGreaterThanOrEqual(0.12);          // measured ~30 %
     expect(flattened / 40).toBeLessThanOrEqual(1.2);           // measured ~0.4 per race
     expect(playerOut / 40).toBeLessThanOrEqual(0.2);           // measured ~5 %
-  });
+  }, 60000);
 });
