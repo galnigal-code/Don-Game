@@ -6,6 +6,7 @@ import { createBrain, drivePlayerProxy } from '../sim/BotDriver.js';
 import { createRng } from '../sim/rng.js';
 import { createRenderer } from '../render/Renderer.js';
 import { buildTrackMesh } from '../render/TrackMesh.js';
+import { loadSurfaceTextures } from '../render/textures.js';
 import { createCarModel } from '../render/CarModel.js';
 import { CameraRig } from '../render/CameraRig.js';
 import { EntityViews } from '../render/EntityViews.js';
@@ -41,9 +42,12 @@ export class Game {
     const r = createRenderer(canvas);
     this.renderer = r.renderer; this.scene = r.scene; this.camera = r.camera; this.setRatioCap = r.setRatioCap;
     this.track = createTrack();
-    this.scene.add(buildTrackMesh(this.track));
+    this.trackMesh = buildTrackMesh(this.track);
+    this.scene.add(this.trackMesh);
     this.env = buildEnvironment(this.track, this.scene);
+    this.surfaceTex = null;
     this.setupQuality(params);
+    if (!params.has('notex')) loadSurfaceTextures().then((t) => { this.surfaceTex = t; this.applyQuality(this.qLevel); window.__texLoaded = true; });
     this.rig = new CameraRig(this.camera);
     this.entityViews = new EntityViews(this.scene, this.track);
     this.effects = new Effects(this.scene);
@@ -125,6 +129,8 @@ export class Game {
     this.qLevel = level; this.qCfg = L;
     this.setRatioCap(L.pixelRatio);
     this.env.setDetail(L.decor);
+    this.trackMesh.userData.applySurfaces(this.surfaceTex, L);
+    this.env.applySurfaces(this.surfaceTex, L);
     try { localStorage.setItem('dongame.quality', String(level)); } catch { /* ignore */ }
   }
 

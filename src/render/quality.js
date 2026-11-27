@@ -3,10 +3,10 @@
 
 /** What each quality level changes. level 3 = best. */
 export const LEVELS = [
-  { name: 'low',    pixelRatio: 0.6, particles: 0.25, decor: 0,    labels: false, blobs: false },
-  { name: 'medium', pixelRatio: 0.8, particles: 0.5,  decor: 0.5,  labels: true,  blobs: true },
-  { name: 'good',   pixelRatio: 1.0, particles: 1,    decor: 1,    labels: true,  blobs: true },
-  { name: 'high',   pixelRatio: 1.5, particles: 1,    decor: 1,    labels: true,  blobs: true },
+  { name: 'low',    pixelRatio: 0.6, particles: 0.25, decor: 0,    labels: false, blobs: false, tex: false, normal: false },
+  { name: 'medium', pixelRatio: 0.8, particles: 0.5,  decor: 0.5,  labels: true,  blobs: true,  tex: true,  normal: false },
+  { name: 'good',   pixelRatio: 1.0, particles: 1,    decor: 1,    labels: true,  blobs: true,  tex: true,  normal: true },
+  { name: 'high',   pixelRatio: 1.5, particles: 1,    decor: 1,    labels: true,  blobs: true,  tex: true,  normal: true },
 ];
 
 export class QualityController {

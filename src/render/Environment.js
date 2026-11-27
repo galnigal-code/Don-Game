@@ -3,6 +3,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { CONFIG } from '../config.js';
 import { createRng } from '../sim/rng.js';
 import { createTerrain } from './terrainMath.js';
+import { applySurface } from './textures.js';
 
 const SAND = new THREE.Color(0xc99458), DRY = new THREE.Color(0xe0b878), RED = new THREE.Color(0xb4532a), DEEP = new THREE.Color(0x9a6a3a);
 
@@ -40,12 +41,13 @@ export function buildEnvironment(track, scene) {
   const M = 520, CELL = 26;
   minX -= M; maxX += M; minZ -= M; maxZ += M;
   const nx = Math.ceil((maxX - minX) / CELL) + 1, nz = Math.ceil((maxZ - minZ) / CELL) + 1;
-  const pos = new Float32Array(nx * nz * 3), col = new Float32Array(nx * nz * 3), dist = new Float32Array(nx * nz);
+  const uvs = new Float32Array(nx * nz * 2), pos = new Float32Array(nx * nz * 3), col = new Float32Array(nx * nz * 3), dist = new Float32Array(nx * nz);
   const tmp = new THREE.Color();
   for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) {
     const x = minX + i * CELL, z = minZ + j * CELL, k = j * nx + i;
     const t = terrain.sample(x, z);
     pos[k * 3] = x; pos[k * 3 + 1] = t.y; pos[k * 3 + 2] = z; dist[k] = t.d;
+    uvs[k * 2] = x / 14; uvs[k * 2 + 1] = z / 14;
     const rel = t.y - (t.py - 2);
     tmp.copy(SAND).lerp(DRY, terrain.noise(x / 60, z / 60) * 0.7);
     tmp.lerp(DEEP, Math.max(0, Math.min(1, -rel / 12)) * 0.6);
@@ -62,8 +64,10 @@ export function buildEnvironment(track, scene) {
   const tg = new THREE.BufferGeometry();
   tg.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   tg.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  tg.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
   tg.setIndex(idx); tg.computeVertexNormals();
-  group.add(new THREE.Mesh(tg, new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, side: THREE.DoubleSide })));
+  const terrainMat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, side: THREE.DoubleSide });
+  group.add(new THREE.Mesh(tg, terrainMat));
 
   /* ---- decorations on the shoulders: cacti and rock clusters ---- */
   const dummy = new THREE.Object3D();
@@ -115,6 +119,8 @@ export function buildEnvironment(track, scene) {
     update(camera) { sun.position.copy(camera.position).addScaledVector(sunDir, 700); },
     /** Fraction (0..1) of cacti and rocks to draw (quality control). */
     setDetail(f) { cacti.count = Math.floor(ci * f); rocks.count = Math.floor(ri * f); },
+    /** Surface textures (see textures.js). The vertex colours stay as the tint, so the texture only adds grain and relief. */
+    applySurfaces(tex, flags) { applySurface(terrainMat, tex?.sand, flags, { tint: 0xffffff, flat: 0xffffff, normalScale: 0.8 }); if (terrainMat.map) terrainMat.color.setRGB(1.7, 1.7, 1.7); },
     stats: { terrainTris: idx.length / 3, cacti: ci, rocks: ri },
   };
 }

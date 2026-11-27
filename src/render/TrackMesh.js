@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { CONFIG } from '../config.js';
+import { applySurface } from './textures.js';
 
 function roadTexture() {
   const c = document.createElement('canvas');
@@ -11,6 +12,16 @@ function roadTexture() {
     g.fillStyle = `rgba(${v},${v - 4},${v - 8},0.35)`;
     g.fillRect(Math.random() * 256, Math.random() * 512, 2, 2);
   }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+  return t;
+}
+
+/** Lane markings on a transparent background, drawn as a thin overlay above the asphalt (so the asphalt photo can show through). */
+function markingsTexture() {
+  const c = document.createElement('canvas');
+  c.width = 256; c.height = 512;
+  const g = c.getContext('2d');
   g.fillStyle = '#f4efe3';                       // edge lines
   g.fillRect(8, 0, 6, 512); g.fillRect(242, 0, 6, 512);
   g.fillStyle = '#f2d24a';                       // dashed centre line: 6 m dash, 4 m gap per 10 m tile
@@ -46,8 +57,10 @@ function rampTexture() {
 
 class Strip {
   constructor() { this.pos = []; this.uv = []; this.idx = []; this.prev = -1; this.count = 0; }
-  row(a, b, v = 0) {
-    this.pos.push(...a, ...b); this.uv.push(0, v, 1, v);
+  /** uvA/uvB: explicit [u, v] for the two vertices (surface textures); otherwise u runs 0..1 across and v is `v`. */
+  row(a, b, v = 0, uvA = null, uvB = null) {
+    this.pos.push(...a, ...b);
+    if (uvA) this.uv.push(...uvA, ...uvB); else this.uv.push(0, v, 1, v);
     const i = this.count; this.count += 2;
     if (this.prev >= 0) { const p = this.prev; this.idx.push(p, p + 1, i, p + 1, i + 1, i); }
     this.prev = i;
@@ -70,26 +83,36 @@ export function buildTrackMesh(track) {
   const mat = (color, extra = {}) => new THREE.MeshLambertMaterial({ color, side: THREE.DoubleSide, ...extra });   // no specular needed: much cheaper than Standard on phones
   const materials = {
     road: mat(0xffffff, { map: roadTexture() }),
+    markings: new THREE.MeshLambertMaterial({ map: markingsTexture(), transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }),
     sand: mat(0xd9b27a), ground: mat(0xc99458), wood: mat(0x8a5a30),
     rock: mat(0xa04a2a), rockTop: mat(0xb8643a), cliff: mat(0x8f4426),
   };
+  const roadFallback = materials.road.map;
   const strips = {};
   const S = (name, side = 0) => (strips[name + side] ||= { name, strip: new Strip() }).strip;
 
   const P = (sm, lat, y) => [sm.px + sm.rx * lat, sm.py + y, sm.pz + sm.rz * lat];
+  // surface-texture coordinates: floors use world x/z, walls use along-track and height (about 8 m per tile)
+  const TS = 1 / 8;
+  const flat = (p) => [p[0] * TS, p[2] * TS];
+  const wall = (sm, p) => [sm.s * TS, p[1] * TS];
 
   function side(sm, sd, edge) {
     const hw = sm.halfWidth;
     if (edge === 'sand') {
-      S('sand', sd).row(P(sm, sd * hw, -0.02), P(sm, sd * (hw + SE), -0.05));
+      const a = P(sm, sd * hw, -0.02), b = P(sm, sd * (hw + SE), -0.05);
+      S('sand', sd).row(a, b, 0, flat(a), flat(b));
       S('wood', sd).row(P(sm, sd * (hw + SE), -0.3), P(sm, sd * (hw + SE), 1.2));
-      S('ground', sd).row(P(sm, sd * (hw + SE), -0.2), P(sm, sd * (hw + SE + 100), -2.0));   // slopes down to meet the terrain
+      const c = P(sm, sd * (hw + SE), -0.2), d = P(sm, sd * (hw + SE + 100), -2.0);   // slopes down to meet the terrain
+      S('ground', sd).row(c, d, 0, flat(c), flat(d));
     } else if (edge === 'wall') {
-      S('rock', sd).row(P(sm, sd * hw, -0.3), P(sm, sd * hw, 8));
-      S('rockTop', sd).row(P(sm, sd * hw, 8), P(sm, sd * (hw + 100), 6));
+      const a = P(sm, sd * hw, -0.3), b = P(sm, sd * hw, 8), c = P(sm, sd * (hw + 100), 6);
+      S('rock', sd).row(a, b, 0, wall(sm, a), wall(sm, b));
+      S('rockTop', sd).row(b, c, 0, flat(b), flat(c));
     } else { // cliff
-      S('cliff', sd).row(P(sm, sd * hw, -0.3), P(sm, sd * hw, -30));
-      S('ground', sd).row(P(sm, sd * hw, -30), P(sm, sd * (hw + 100), -30));
+      const a = P(sm, sd * hw, -0.3), b = P(sm, sd * hw, -30), c = P(sm, sd * (hw + 100), -30);
+      S('cliff', sd).row(a, b, 0, wall(sm, a), wall(sm, b));
+      S('ground', sd).row(b, c, 0, flat(b), flat(c));
     }
   }
 
@@ -101,6 +124,7 @@ export function buildTrackMesh(track) {
     const sm = track.samples[k];
     if (track.inGap(sm.s)) continue;                  // the road is missing here (trench below)
     S('road').row(P(sm, -sm.halfWidth, 0), P(sm, sm.halfWidth, 0), sm.s / 10);
+    S('markings').row(P(sm, -sm.halfWidth, 0.03), P(sm, sm.halfWidth, 0.03), sm.s / 10);
     const kk = sm.edgeLeft + '|' + sm.edgeRight;
     if (key !== null && kk !== key) {           // close the previous run on this row, then start a new one
       side(sm, -1, prevEdges[0]); side(sm, 1, prevEdges[1]);
@@ -163,6 +187,22 @@ export function buildTrackMesh(track) {
       group.add(box);
     }
   }
+
+  // surface textures (loaded later); each material falls back to its flat colour until / unless they are applied
+  group.userData.applySurfaces = (tex, flags) => {
+    const road = materials.road;
+    if (tex?.road?.diff) { tex.road.diff.repeat.set(Math.max(1, (CONFIG.track.HALF_WIDTH * 2) / 3.4), 3); }
+    if (tex?.road?.nor) tex.road.nor.repeat.set(Math.max(1, (CONFIG.track.HALF_WIDTH * 2) / 3.4), 3);
+    const swap = flags.tex && tex?.road?.diff;
+    road.map = swap ? tex.road.diff : roadFallback;
+    road.normalMap = swap && flags.normal ? tex.road.nor : null;
+    road.needsUpdate = true;
+    applySurface(materials.sand, tex?.sand, flags, { tint: 0xf0dcc0, flat: 0xd9b27a, boost: 1.7 });
+    applySurface(materials.ground, tex?.sand, flags, { tint: 0xe4c9a0, flat: 0xc99458, boost: 1.7 });
+    applySurface(materials.rock, tex?.rock, flags, { tint: 0xe6a58a, flat: 0xa04a2a, boost: 1.5 });
+    applySurface(materials.rockTop, tex?.sand, flags, { tint: 0xf0b890, flat: 0xb8643a, boost: 1.6 });
+    applySurface(materials.cliff, tex?.rock, flags, { tint: 0xd8957a, flat: 0x8f4426, boost: 1.5 });
+  };
 
   return group;
 }
