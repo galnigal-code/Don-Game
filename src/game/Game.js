@@ -8,6 +8,7 @@ import { createRenderer } from '../render/Renderer.js';
 import { buildTrackMesh } from '../render/TrackMesh.js';
 import { loadSurfaceTextures } from '../render/textures.js';
 import { createCarModel } from '../render/CarModel.js';
+import { CarSuspension, wheelSteerAngle } from '../render/suspension.js';
 import { CameraRig } from '../render/CameraRig.js';
 import { EntityViews } from '../render/EntityViews.js';
 import { Effects } from '../render/Effects.js';
@@ -40,11 +41,13 @@ export class Game {
     this.fixedSeed = params.has('seed') ? Number(params.get('seed')) : null;
 
     const r = createRenderer(canvas);
-    this.renderer = r.renderer; this.scene = r.scene; this.camera = r.camera; this.setRatioCap = r.setRatioCap;
+    this.renderer = r.renderer; this.scene = r.scene; this.camera = r.camera; this.setRatioCap = r.setRatioCap; this.gfx = r;
     this.track = createTrack();
     this.trackMesh = buildTrackMesh(this.track);
+    this.trackMesh.traverse((o) => { if (o.isMesh) o.receiveShadow = true; });
     this.scene.add(this.trackMesh);
     this.env = buildEnvironment(this.track, this.scene);
+    this.env.group.children[0].receiveShadow = true;
     this.surfaceTex = null;
     this.setupQuality(params);
     if (!params.has('notex')) loadSurfaceTextures().then((t) => { this.surfaceTex = t; this.applyQuality(this.qLevel); window.__texLoaded = true; });
@@ -129,6 +132,8 @@ export class Game {
     this.qLevel = level; this.qCfg = L;
     this.setRatioCap(L.pixelRatio);
     this.env.setDetail(L.decor);
+    this.gfx.setReflections(L.reflect); this.gfx.setShadows(L.shadows);
+    for (const v of this.views || []) v.setGloss?.(level >= 3);
     this.trackMesh.userData.applySurfaces(this.surfaceTex, L);
     this.env.applySurfaces(this.surfaceTex, L);
     try { localStorage.setItem('dongame.quality', String(level)); } catch { /* ignore */ }
@@ -199,7 +204,8 @@ export class Game {
     this.entityViews.setWorld(this.world);
     this.views = this.world.cars.map((car) => {
       const v = createCarModel(car.color, car.isPlayer ? null : car.name);
-      this.scene.add(v.root); this.scene.add(v.blob);
+      v.root.traverse((o) => { if (o.isMesh && o.material.type !== 'MeshBasicMaterial') o.castShadow = true; });
+      this.scene.add(v.root); this.scene.add(v.blob); v.setGloss(this.qLevel >= 3);
       return v;
     });
     this.hud.reset();
@@ -487,10 +493,14 @@ export class Game {
       v.root.rotation.set(pitch, -heading, 0, 'YXZ');
       const k = car.hit.kind;
       const p = k ? 1 - car.hit.t / CONFIG.car.HIT_TIME[k] : 0;
-      v.body.rotation.z = car.steer * 0.07 + (k === 'bump' ? Math.sin(p * 30) * 0.08 : 0);
+      const sus = (v.sus ||= new CarSuspension()).update(car, dt, CONFIG.car.CRUISE_SPEED);
+      v.body.rotation.z = sus.roll + (k === 'bump' ? Math.sin(p * 30) * 0.08 : 0);
+      v.body.rotation.x = sus.pitch;
+      const steerAng = wheelSteerAngle(car.steer, car.speed / CONFIG.car.CRUISE_SPEED);
+      for (const pv of v.frontPivots) pv.rotation.y = steerAng;
       v.body.rotation.y = k === 'spin' ? p * Math.PI * 4 : k === 'slip' ? Math.sin(car.t * 9) * 0.45 : 0;
-      v.body.rotation.x = k === 'launch' ? -p * Math.PI * 2 : 0;
-      v.body.position.y = k === 'bump' ? Math.abs(Math.sin(p * Math.PI * 3)) * 0.45 : 0;
+      if (k === 'launch') v.body.rotation.x = -p * Math.PI * 2;
+      v.body.position.y = (k === 'bump' ? Math.abs(Math.sin(p * Math.PI * 3)) * 0.45 : 0) + sus.y;
       v.shield.visible = car.shieldT > 0 && (car.shieldT > 1 || Math.floor(car.t * 8) % 2 === 0);
       for (const w of v.wheels) w.rotation.x -= (car.speed * dt) / 0.4;
       let visible = car.state !== 'respawning';
@@ -506,7 +516,7 @@ export class Game {
       const groundY = this.tmpWorld.y - car.h + gh;
       v.blob.position.set(this.tmpWorld.x, groundY + 0.05, this.tmpWorld.z);
       v.blob.rotation.set(Math.atan2(sm.ty, Math.hypot(sm.tx, sm.tz)), -heading, 0, 'YXZ');
-      v.blob.visible = this.qCfg.blobs && visible && car.state !== 'falling';
+      v.blob.visible = this.qCfg.blobs && !this.qCfg.shadows && visible && car.state !== 'falling';
       v.blob.scale.setScalar(Math.max(0.5, 1 - Math.max(0, car.h - gh) * 0.12));
       if (dt > 0) this.emitCarParticles(car, v, dt, sm.curvature);
       if (v.label) v.label.visible = this.qCfg.labels && this.camera.position.distanceToSquared(v.root.position) < 55 * 55;   // far labels only clutter
@@ -516,6 +526,7 @@ export class Game {
   }
 
   render(dt) {
+    if (this.qCfg.shadows && this.world) this.gfx.followShadow(this.camera.position.clone().lerp(this.views[this.world.cars.indexOf(this.world.player)].root.position, 0.75));
     const t0 = performance.now();
     const w = this.world, player = w.player;
     this.updateViews(dt);

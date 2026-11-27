@@ -70,7 +70,7 @@ export function createCarModel(color, name = null) {
   const body = new THREE.Group();       // tilts (roll/pitch/spin) on top of root
   root.add(body);
 
-  const GLASS = 0x27323f, DARK = 0x15161a, WHITE = 0xf4f1ea, RIM = 0xd5d8de, TIRE = 0x181818;
+  const PAINT_SHADOW = 0x3a3a40, GLASS = 0x27323f, DARK = 0x15161a, WHITE = 0xf4f1ea, RIM = 0xd5d8de, TIRE = 0x181818;
   const paint = [], parts = [], lamps = [];
   const box = (w, h, d) => new THREE.BoxGeometry(w, h, d);
 
@@ -81,8 +81,21 @@ export function createCarModel(color, name = null) {
   paint.push(bake(profileGeometry([[-0.78, 1.3], [-0.7, 1.36], [0.3, 1.38], [0.36, 1.31]], 1.4, 0.03)));
   // racing stripes
   for (const x of [-0.17, 0.17]) parts.push(bake(box(0.13, 0.03, 3.0), { color: WHITE, x, y: 0.86, z: -0.4, rx: 0.045 }));
-  // wheel arches (dark discs hint at the cut-outs)
-  for (const [x, z] of [[-0.97, -1.38], [0.97, -1.38], [-0.97, 1.4], [0.97, 1.4]]) parts.push(bake(new THREE.CylinderGeometry(0.55, 0.55, 0.06, 14), { color: DARK, x, y: 0.45, z, rz: Math.PI / 2 }));
+  // wheel arches: dark cut-out discs plus a raised flare over each wheel
+  for (const [x, z] of [[-0.97, -1.38], [0.97, -1.38], [-0.97, 1.4], [0.97, 1.4]]) {
+    parts.push(bake(new THREE.CylinderGeometry(0.55, 0.55, 0.06, 16), { color: DARK, x, y: 0.45, z, rz: Math.PI / 2 }));
+    paint.push(bake(new THREE.TorusGeometry(0.58, 0.07, 5, 14, Math.PI), { x: x * 1.02, y: 0.45, z, ry: Math.PI / 2 }));
+  }
+  // side skirts, door shut lines, bonnet vents, grille, headlight housings, rear diffuser
+  for (const x of [-0.97, 0.97]) {
+    parts.push(bake(box(0.07, 0.1, 1.5), { color: DARK, x, y: 0.34, z: 0.0 }));
+    for (const z of [-0.62, 0.55]) parts.push(bake(box(0.02, 0.4, 0.025), { color: DARK, x: x * 1.005, y: 0.62, z }));
+  }
+  for (const x of [-0.3, 0.3]) for (const z of [-1.25, -1.1, -0.95]) parts.push(bake(box(0.34, 0.02, 0.07), { color: DARK, x, y: 0.79, z }));
+  parts.push(bake(box(0.9, 0.2, 0.06), { color: DARK, y: 0.48, z: -2.17 }));
+  for (const x of [-0.62, 0.62]) parts.push(bake(box(0.5, 0.2, 0.08), { color: DARK, x, y: 0.62, z: -2.16 }));
+  parts.push(bake(box(1.4, 0.16, 0.5), { color: DARK, y: 0.34, z: 2.05 }));
+  for (const x of [-0.4, 0, 0.4]) parts.push(bake(box(0.04, 0.14, 0.5), { color: PAINT_SHADOW, x, y: 0.34, z: 2.1 }));
   // rear wing, front splitter, mirrors, exhaust tips
   parts.push(bake(box(2.0, 0.07, 0.55), { color: DARK, y: 1.15, z: 1.95 }));
   for (const x of [-0.75, 0.75]) parts.push(bake(box(0.08, 0.38, 0.4), { color: DARK, x, y: 0.95, z: 1.95 }));
@@ -94,7 +107,8 @@ export function createCarModel(color, name = null) {
   for (const x of [-0.62, 0.62]) lamps.push(bake(box(0.42, 0.13, 0.1), { color: 0xfff2c0, x, y: 0.62, z: -2.18 }));
   lamps.push(bake(box(1.5, 0.1, 0.08), { color: 0xff3030, y: 0.74, z: 2.17 }));
 
-  const paintMesh = new THREE.Mesh(merged(paint), new THREE.MeshStandardMaterial({ color, metalness: 0.1, roughness: 0.35 }));
+  const paintMat = new THREE.MeshPhysicalMaterial({ color, metalness: 0.25, roughness: 0.32, clearcoat: 0, clearcoatRoughness: 0.08 });
+  const paintMesh = new THREE.Mesh(merged(paint), paintMat);
   body.add(paintMesh, new THREE.Mesh(merged(parts), PARTS_MAT), new THREE.Mesh(merged(lamps), LAMP_MAT));
 
   // turbo flames (toggled by the game)
@@ -105,17 +119,26 @@ export function createCarModel(color, name = null) {
     f.position.set(x, 0.42, 2.95); f.rotation.x = Math.PI / 2; f.visible = false; body.add(f); flames.push(f);
   }
 
-  // wheels: tyre + rim + spokes merged into one mesh per wheel (they spin)
+  // wheels: tyre, tread, rim lip, hub and 5 spokes merged into one mesh per wheel. Each wheel = pivot (steering, front only) > spin group
+  const spokes = [];
+  for (let i = 0; i < 5; i++) spokes.push(bake(box(0.44, 0.07, 0.5), { color: RIM, rx: (i * Math.PI) / 5 }));
   const wheelGeo = merged([
-    bake(new THREE.CylinderGeometry(0.42, 0.42, 0.4, 16), { color: TIRE, rz: Math.PI / 2 }),
-    bake(new THREE.CylinderGeometry(0.27, 0.27, 0.42, 10), { color: RIM, rz: Math.PI / 2 }),
-    bake(box(0.44, 0.07, 0.5), { color: DARK }),
+    bake(new THREE.CylinderGeometry(0.42, 0.42, 0.4, 20), { color: TIRE, rz: Math.PI / 2 }),
+    bake(new THREE.CylinderGeometry(0.425, 0.425, 0.28, 20), { color: 0x0e0e0e, rz: Math.PI / 2 }),
+    bake(new THREE.CylinderGeometry(0.3, 0.3, 0.42, 14), { color: DARK, rz: Math.PI / 2 }),
+    bake(new THREE.CylinderGeometry(0.29, 0.29, 0.43, 14), { color: RIM, rz: Math.PI / 2 }),
+    bake(new THREE.CylinderGeometry(0.2, 0.2, 0.44, 12), { color: DARK, rz: Math.PI / 2 }),
+    bake(new THREE.CylinderGeometry(0.09, 0.09, 0.46, 8), { color: RIM, rz: Math.PI / 2 }),
+    ...spokes,
   ]);
-  const wheels = [];
+  const wheels = [], frontPivots = [];
   for (const [x, z] of [[-1.0, -1.38], [1.0, -1.38], [-1.0, 1.4], [1.0, 1.4]]) {
-    const w = new THREE.Group(); w.position.set(x, 0.42, z);
-    w.add(new THREE.Mesh(wheelGeo, PARTS_MAT));
-    root.add(w); wheels.push(w);
+    const pivot = new THREE.Group(); pivot.position.set(x, 0.42, z);
+    const spin = new THREE.Group();
+    spin.add(new THREE.Mesh(wheelGeo, PARTS_MAT));
+    pivot.add(spin); root.add(pivot);
+    wheels.push(spin);
+    if (z < 0) frontPivots.push(pivot);
   }
 
   const shield = new THREE.Mesh(new THREE.SphereGeometry(2.7, 18, 12),
@@ -130,5 +153,7 @@ export function createCarModel(color, name = null) {
   const label = name ? nameLabel(name, color) : null;
   if (label) root.add(label);
   void IDENT;
-  return { root, body, wheels, label, shield, flames, blob: blobHolder };
+  /** High tier: glossy clear-coat on the paint (costs a bit more GPU). */
+  const setGloss = (on) => { const v = on ? 0.9 : 0; if (paintMat.clearcoat !== v) { paintMat.clearcoat = v; paintMat.needsUpdate = true; } };
+  return { root, body, wheels, frontPivots, label, shield, flames, blob: blobHolder, setGloss };
 }
