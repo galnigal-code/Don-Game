@@ -155,5 +155,6 @@ export function createCarModel(color, name = null) {
   void IDENT;
   /** High tier: glossy clear-coat on the paint (costs a bit more GPU). */
   const setGloss = (on) => { const v = on ? 0.9 : 0; if (paintMat.clearcoat !== v) { paintMat.clearcoat = v; paintMat.needsUpdate = true; } };
-  return { root, body, wheels, frontPivots, label, shield, flames, blob: blobHolder, setGloss };
+  const setEnv = (map) => { for (const m of [paintMat, PARTS_MAT]) { if (m.envMap !== map) { m.envMap = map; m.envMapIntensity = 0.5; m.needsUpdate = true; } } };
+  return { root, body, wheels, frontPivots, label, shield, flames, blob: blobHolder, setGloss, setEnv };
 }

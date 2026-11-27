@@ -56,8 +56,7 @@ export function createRenderer(canvas) {
         pm.dispose(); sky.geometry.dispose(); sky.material.dispose();
       } catch { envMap = null; }                        // no reflections is fine
     }
-    scene.environment = on ? envMap : null;
-    scene.environmentIntensity = 0.28;
+    return on ? envMap : null;     // NOT scene.environment: that would make every terrain pixel sample it too (very slow). Only the cars use it.
   };
 
   /* Real shadows (top tier only): the sun's shadow box follows the player. */

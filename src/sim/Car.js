@@ -153,7 +153,7 @@ export function stepCar(car, dt, track) {
   if (edge === 'cliff') {
     if (absd > hw && !finished) { startFall(car); return; }
   } else {
-    const limit = edge === 'wall' ? hw : hw + CONFIG.track.SAND_EXTRA;
+    const limit = edge === 'wall' ? hw - C.HALF_WIDTH : hw + CONFIG.track.SAND_EXTRA;
     if (absd > limit) {
       car.d = side * limit;
       if (car.yaw * side > 0) car.yaw = -car.yaw * 0.4;

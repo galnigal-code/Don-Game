@@ -9,7 +9,7 @@ export const CONFIG = {
     HIT_SPEED_MULT: { spin: 0.35, launch: 0.1, slip: 0.7, bump: 0.45, shove: 0.85 },
     HIT_TIME: { spin: 1.5, launch: 1.5, slip: 1.5, bump: 1.0, shove: 0.7 },
     HIT_DECEL: 55, RESPAWN_TIME: 1.5, INVULN_AFTER_RESPAWN: 1.5, STUCK_TIME: 3,
-    RADIUS: 1.1,
+    RADIUS: 1.1, HALF_WIDTH: 0.95,   // body half-width: a car touching a wall has its SIDE at the wall, not its centre
   },
   track: { LENGTH_TARGET: 2900, HALF_WIDTH: 9, CANYON_HALF_WIDTH: 6, WALL_PUSH_COOLDOWN: 0.4, FALL_TIME: 0.8, SAND_EXTRA: 6, CHECKPOINT_EVERY: 80, SAMPLE_STEP: 1 },
   items: {

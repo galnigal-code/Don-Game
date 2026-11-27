@@ -54,7 +54,7 @@ export class QualityController {
 }
 
 /** Starting level from simple device hints (cores, memory). A weak device starts one step lower. */
-export function initialLevel({ cores = 8, memory = 8 } = {}) {
-  if (cores <= 4 || memory <= 3) return 2;
+export function initialLevel({ cores = 8, memory = 8, touch = false } = {}) {
+  if (cores <= 4 || memory <= 3 || touch) return 2;   // phones start without shadows; they can still step up if they have headroom
   return 3;
 }

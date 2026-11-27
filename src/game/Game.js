@@ -118,7 +118,7 @@ export class Game {
   setupQuality(params) {
     const q = params.get('quality');
     const pinned = q !== null && q !== 'auto' && !Number.isNaN(Number(q)) ? Math.max(0, Math.min(3, Number(q))) : null;
-    let start = initialLevel({ cores: navigator.hardwareConcurrency || 8, memory: navigator.deviceMemory || 8 });
+    let start = initialLevel({ cores: navigator.hardwareConcurrency || 8, memory: navigator.deviceMemory || 8, touch: matchMedia('(pointer: coarse)').matches });
     try { const saved = Number(localStorage.getItem('dongame.quality')); if (!Number.isNaN(saved) && localStorage.getItem('dongame.quality') !== null) start = Math.min(start, Math.max(0, Math.min(3, saved))); } catch { /* ignore */ }
     if (pinned !== null) start = pinned;
     this.quality = new QualityController({ start });
@@ -132,8 +132,8 @@ export class Game {
     this.qLevel = level; this.qCfg = L;
     this.setRatioCap(L.pixelRatio);
     this.env.setDetail(L.decor);
-    this.gfx.setReflections(L.reflect); this.gfx.setShadows(L.shadows);
-    for (const v of this.views || []) v.setGloss?.(level >= 3);
+    this.envMap = this.gfx.setReflections(L.reflect); this.gfx.setShadows(L.shadows);
+    for (const v of this.views || []) { v.setGloss?.(level >= 3); v.setEnv?.(this.envMap); }
     this.trackMesh.userData.applySurfaces(this.surfaceTex, L);
     this.env.applySurfaces(this.surfaceTex, L);
     try { localStorage.setItem('dongame.quality', String(level)); } catch { /* ignore */ }
@@ -205,7 +205,7 @@ export class Game {
     this.views = this.world.cars.map((car) => {
       const v = createCarModel(car.color, car.isPlayer ? null : car.name);
       v.root.traverse((o) => { if (o.isMesh && o.material.type !== 'MeshBasicMaterial') o.castShadow = true; });
-      this.scene.add(v.root); this.scene.add(v.blob); v.setGloss(this.qLevel >= 3);
+      this.scene.add(v.root); this.scene.add(v.blob); v.setGloss(this.qLevel >= 3); v.setEnv(this.envMap);
       return v;
     });
     this.hud.reset();
