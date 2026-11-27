@@ -12,7 +12,9 @@
     "smoke:tilt": "node tests/smoke-tilt.mjs",
     "smoke:version": "node tests/smoke-version.mjs",
     "smoke:perf": "node tests/smoke-perf.mjs",
-    "test:direction": "vitest run tests/unit/directions.test.js tests/unit/tilt.test.js && node tests/real-sensor.mjs"
+    "test:direction": "vitest run tests/unit/directions.test.js tests/unit/tilt.test.js && node tests/real-sensor.mjs",
+    "dev:server": "node tools/dev-server.mjs",
+    "smoke:mp": "node tests/mp-smoke.mjs"
   },
   "dependencies": {
     "three": "0.186.1"
@@ -20,6 +22,7 @@
   "devDependencies": {
     "sharp": "0.35.5",
     "vite": "8.3.8",
-    "vitest": "5.1.1"
+    "vitest": "5.1.1",
+    "ws": "8.23.0"
   }
 }

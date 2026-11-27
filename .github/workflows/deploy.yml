@@ -22,6 +22,8 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
+        env:
+          VITE_ROOMS_URL: ${{ vars.ROOMS_URL }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
@@ -34,3 +36,17 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
+
+  # The room server (Cloudflare Worker + Durable Object). Runs only once the two Cloudflare secrets exist in the repository.
+  deploy-server:
+    needs: build
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy room server
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then echo "Cloudflare secrets are not set: skipping the room server"; exit 0; fi
+          cd server && npx --yes wrangler@4.169.0 deploy

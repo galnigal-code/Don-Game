@@ -1,5 +1,5 @@
 // Menu and calibration screens (Hebrew, RTL).
-export function createScreens(root, tilt, { onPlay, onStart }) {
+export function createScreens(root, tilt, { onPlay, onStart, onCreate, onJoin }) {
   const el = document.createElement('div');
   el.id = 'screens';
   el.innerHTML = `
@@ -7,7 +7,11 @@ export function createScreens(root, tilt, { onPlay, onStart }) {
       <div class="panel">
         <div class="logo">Don Game</div>
         <p>מרוץ מדבר. מטים את הטלפון כמו הגה, אוספים הפתעות ומכשילים את היריבים.</p>
-        <button class="big" id="btn-play">שחק</button>
+        <button class="big" id="btn-play">מרוץ נגד המחשב</button>
+        <div class="row" id="menu-online" hidden>
+          <button class="big alt" id="btn-create">פתח חדר</button>
+          <button class="big alt" id="btn-join">הצטרף לחדר</button>
+        </div>
         <p class="hint" id="hint-menu" hidden>לחוויה הכי טובה החזק את הטלפון לרוחב</p>
       </div>
     </div>
@@ -43,6 +47,8 @@ export function createScreens(root, tilt, { onPlay, onStart }) {
   const menu = $('scr-menu'), calib = $('scr-calib');
 
   $('btn-play').addEventListener('click', () => onPlay());
+  $('btn-create').addEventListener('click', () => onCreate());
+  $('btn-join').addEventListener('click', () => onJoin());
   $('btn-start').addEventListener('click', () => onStart());
   $('btn-invert').addEventListener('click', () => tilt.flipDirection());
   $('btn-redo').addEventListener('click', () => tilt.beginProtocol());
@@ -57,7 +63,8 @@ export function createScreens(root, tilt, { onPlay, onStart }) {
 
   let openedAt = 0, visible = null;
   const api = {
-    showMenu() { visible = 'menu'; menu.hidden = false; calib.hidden = true; $('hint-menu').hidden = !portrait(); },
+    showMenu(online = false) { visible = 'menu'; menu.hidden = false; calib.hidden = true; $('menu-online').hidden = !online; $('hint-menu').hidden = !portrait(); },
+    setStartLabel(text) { $('btn-start').textContent = text; },
     showCalibrate() {
       visible = 'calib'; menu.hidden = true; calib.hidden = false; openedAt = performance.now();
       refreshSeg(); $('hint-calib').hidden = !portrait();

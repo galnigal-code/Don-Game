@@ -7,6 +7,9 @@ import { createRng } from '../sim/rng.js';
 import { createRenderer } from '../render/Renderer.js';
 import { buildTrackMesh } from '../render/TrackMesh.js';
 import { loadSurfaceTextures } from '../render/textures.js';
+import { NetClient, roomsUrl, createRoom, roomInfo } from '../net/NetClient.js';
+import { createLobbyScreens, loadProfile } from '../ui/lobby.js';
+import { normalizeCode } from '../net/room/codes.js';
 import { createCarModel } from '../render/CarModel.js';
 import { CarSuspension, wheelSteerAngle } from '../render/suspension.js';
 import { CameraRig } from '../render/CameraRig.js';
@@ -37,6 +40,7 @@ export class Game {
   constructor(canvas, uiRoot, params) {
     this.params = params;
     this.autopilot = params.has('autopilot');
+    this.autoDrive = params.has('autodrive');      // tests: drive by itself but keep the normal menus (room flows)
     this.fast = Math.max(1, Number(params.get('fast')) || 1);
     this.fixedSeed = params.has('seed') ? Number(params.get('seed')) : null;
 
@@ -62,14 +66,14 @@ export class Game {
     this.v3 = new THREE.Vector3();
 
     this.keyboard = new KeyboardInput();
-    this.keyboard.onRestart = () => { if (this.state !== 'menu' && this.state !== 'calibrate') this.beginRace(); };
+    this.keyboard.onRestart = () => { if (!this.net && this.state !== 'menu' && this.state !== 'calibrate') this.beginRace(); };
     this.touch = new TouchSteerTemp(canvas);
     canvas.addEventListener('pointerdown', () => { if (this.state === 'spectate') this.cycleSpectate(); });
     this.tilt = new TiltInput();
     if (params.has('invert')) this.tilt.invert = params.get('invert') !== '0';
     this.uiRoot = uiRoot;
     this.hud = createHud(uiRoot, {
-      onRestart: () => this.beginRace(),
+      onRestart: () => { if (!this.net) this.beginRace(); },
       onRecalibrate: () => this.toCalibrate(),
       onSkip: () => { this.skipping = true; },
     });
@@ -93,7 +97,15 @@ export class Game {
     uiRoot.appendChild(flip); uiRoot.appendChild(toast);
     // any first tap unlocks audio (autopilot / skipCalib flows have no "play" button)
     addEventListener('pointerdown', () => this.sound.unlock(), { once: false, capture: true });
-    this.screens = createScreens(uiRoot, this.tilt, { onPlay: () => this.onPlay(), onStart: () => this.onStartRace() });
+    this.screens = createScreens(uiRoot, this.tilt, { onPlay: () => this.onPlay(), onStart: () => this.onStartRace(), onCreate: () => this.openProfile('create'), onJoin: () => this.openProfile('join') });
+    this.serverUrl = roomsUrl(params);
+    this.net = null; this.roomMsg = null; this.lastResults = null; this.progAcc = 0;
+    this.lobbyUI = createLobbyScreens(uiRoot, {
+      onBack: () => this.toMenu(), onProfileDone: (mode, profile, code) => this.profileDone(mode, profile, code),
+      onStartNow: () => this.net?.send({ t: 'start_now' }), onCalibrate: () => this.toCalibrate(),
+      onLeave: () => this.leaveRoom(), onEmoji: (e) => this.net?.send({ t: 'emoji', e }),
+      toast: (t, ms) => this.showToast(t, ms), serverNow: () => (this.net ? this.net.serverNow() : Date.now()),
+    });
     this.debug = params.has('debug') ? createDebugOverlay(uiRoot, this.renderer, this.tilt) : null;
     this.state = 'menu';
     this.setupVersionBadge(uiRoot);
@@ -172,14 +184,103 @@ export class Game {
 
   start() {
     if (this.autopilot || this.params.has('skipCalib')) { this.tilt.start(); this.beginRace(); }
+    else if (this.params.has('room') && this.serverUrl && normalizeCode(this.params.get('room'))) { this.state = 'menu'; this.screens.hide(); this.openProfile('join', normalizeCode(this.params.get('room'))); }
     else this.toMenu();
     requestAnimationFrame(this.frame);
   }
 
   setHudVisible(v) { this.uiRoot.classList.toggle('hud-hidden', !v); }
   toMenu() {
-    this.sound.stopMusic(); this.state = 'menu'; this.setHudVisible(false); this.screens.showMenu(); }
-  toCalibrate() { this.sound.stopMusic(); this.state = 'calibrate'; this.setHudVisible(false); this.hud.reset(); this.screens.showCalibrate(); }
+    this.sound.stopMusic(); this.state = 'menu'; this.setHudVisible(false); this.lobbyUI.hide(); this.screens.showMenu(!!this.serverUrl); }
+  toCalibrate() { this.lobbyUI.hide(); this.sound.stopMusic(); this.state = 'calibrate'; this.setHudVisible(false); this.hud.reset(); this.screens.showCalibrate(); }
+
+  /* ---------- playing with friends ---------- */
+
+  openProfile(mode, code = '') { this.screens.hide(); this.state = 'lobby'; this.lobbyUI.showProfile(mode, code); }
+
+  /** Sensors, sound, fullscreen: must start inside the tap that continues from the profile screen (iOS permission rules). */
+  async prepareSensors() {
+    this.sound.unlock();
+    const perm = this.tilt.requestPermission();
+    const immersive = (async () => {
+      try { await document.documentElement.requestFullscreen?.({ navigationUI: 'hide' }); } catch { /* not allowed */ }
+      try { await screen.orientation?.lock?.('landscape'); } catch { /* not supported */ }
+    })();
+    await Promise.all([perm, immersive]);
+    this.tilt.start();
+  }
+
+  async profileDone(mode, profile, codeInput) {
+    this.profile = profile;
+    const sensors = this.prepareSensors();
+    try {
+      let code;
+      if (mode === 'create') code = await createRoom(this.serverUrl);
+      else {
+        code = normalizeCode(codeInput);
+        if (!code) { this.lobbyUI.profileError('הקוד הוא 4 אותיות'); return; }
+        const info = await roomInfo(this.serverUrl, code);
+        if (!info?.exists) { this.lobbyUI.profileError(info ? 'החדר לא קיים' : 'אין חיבור לשרת'); return; }
+        if (info.full) { this.lobbyUI.profileError('החדר מלא (6 שחקנים)'); return; }
+      }
+      await sensors;
+      this.connectRoom(code);
+    } catch { this.lobbyUI.profileError('אין חיבור לשרת, נסה שוב'); }
+  }
+
+  connectRoom(code) {
+    this.net?.close();
+    this.net = new NetClient({ base: this.serverUrl, code, profile: this.profile, handlers: {
+      onMessage: (m) => this.onNet(m),
+      onStatus: (s) => { if (s === 'reconnecting') this.showToast('אין חיבור, מנסה שוב…', 2500); },
+      onFatal: (c) => this.netFatal(c),
+    } });
+    this.roomCode = code; this.autoCalibFor = -1; this.lastResults = null;
+    this.net.connect();
+  }
+
+  netFatal(code) {
+    const text = { room_full: 'החדר מלא (6 שחקנים)', no_room: 'החדר לא קיים', update: 'יש גרסה חדשה, מרענן…', lost: 'החיבור אבד', nobody_ready: '' }[code] ?? 'שגיאה';
+    if (code === 'update') { setTimeout(() => location.reload(), 800); }
+    this.leaveRoom(false); this.showToast(text, 3500);
+  }
+
+  leaveRoom(tell = true) {
+    if (tell) this.net?.leave(); else this.net?.close();
+    this.net = null; this.roomMsg = null; this.lobbyUI.hide(); this.hud.hideResult(); this.hud.reset();
+    this.toMenu();
+  }
+
+  shareLink() { const u = new URL(location.href); u.search = ''; u.searchParams.set('room', this.roomCode); if (this.params.get('server')) u.searchParams.set('server', this.params.get('server')); return u.toString(); }
+
+  showLobby() { this.state = 'lobby'; this.screens.hide(); this.setHudVisible(false); this.lobbyUI.showLobby(this.net.you, this.shareLink()); this.lobbyUI.lastResults(this.lastResults, this.net.you); if (this.roomMsg) this.lobbyUI.room(this.roomMsg); }
+
+  onNet(m) {
+    switch (m.t) {
+      case 'welcome': this.toCalibrate(); this.screens.setStartLabel('אישור'); break;
+      case 'room':
+        this.roomMsg = m; this.lobbyUI.room(m);
+        // after a race the lobby asks everyone to calibrate again (the direction is measured before every race)
+        if (m.phase === 'lobby' && this.state === 'lobby' && this.autoCalibFor !== m.raceNo && !m.players.find((p) => p.id === this.net.you)?.calibrated) { this.autoCalibFor = m.raceNo; this.toCalibrate(); this.screens.setStartLabel('אישור'); }
+        break;
+      case 'race_start': this.onRaceStartNet(m); break;
+      case 'results':
+        this.lastResults = m; this.hud.hideResult(); this.hud.reset(); this.sound.stopMusic();
+        this.showLobby(); this.screens.setStartLabel('אישור');
+        break;
+      case 'host': if (m.id === this.net.you) this.showToast('אתה המארח עכשיו 👑'); break;
+      default: break;
+    }
+  }
+
+  onRaceStartNet(m) {
+    if (m.spectator) { if (this.state === 'lobby') this.showToast('מרוץ מתנהל, תיכנס למרוץ הבא', 3000); return; }
+    this.lobbyUI.hide();
+    this.raceSeed = m.seed; this.raceStartNet = m;
+    this.beginRace();
+    this.countT = Math.max(0.3, (m.goAt - this.net.serverNow()) / 1000);
+    this.progAcc = 0;
+  }
 
   /** "Play" tap: must run inside the tap handler (iOS motion permission, fullscreen, orientation lock). */
   async onPlay() {
@@ -194,13 +295,18 @@ export class Game {
     this.toCalibrate();
   }
 
-  onStartRace() { this.tilt.calibrate(); this.beginRace(); }
+  onStartRace() {
+    this.tilt.calibrate();
+    if (this.net) { this.net.send({ t: 'calibrated' }); this.showLobby(); return; }     // in a room: back to the lobby, the race starts from the server
+    this.beginRace();
+  }
 
   newRace() {
     for (const v of this.views) { this.scene.remove(v.root); this.scene.remove(v.blob); }
-    const seed = this.fixedSeed ?? ((Math.random() * 1e9) | 0);
+    const seed = this.net && this.raceSeed ? this.raceSeed : (this.fixedSeed ?? ((Math.random() * 1e9) | 0));
     this.world = createWorld({ track: this.track, seed, roller: this.params.has('roller') ? this.params.get('roller') === '1' : CONFIG.roller.ENABLED });   // shelved: ?roller=1 brings it back (tests)
     this.autoBrain = createBrain(createRng(seed + 1000), this.track);   // used by ?autopilot=1
+    if (this.net && this.profile) { this.world.player.color = this.profile.color; this.world.player.name = this.profile.name; }
     this.entityViews.setWorld(this.world);
     this.views = this.world.cars.map((car) => {
       const v = createCarModel(car.color, car.isPlayer ? null : car.name);
@@ -240,6 +346,7 @@ export class Game {
     this.last = now;
     if (!this.paused) {
       if (this.state === 'countdown') this.updateCountdown(dt);
+      if (this.net && this.state === 'racing') { this.progAcc += dt; if (this.progAcc >= 1) { this.progAcc = 0; this.net.send({ t: 'prog', s: this.world.player.s }); } }
       if (this.state === 'racing' || this.state === 'spectate') { const ts = performance.now(); this.runSim(dt); this.simMs += (performance.now() - ts - this.simMs) * 0.05; }
       if (this.goTextT > 0) { this.goTextT -= dt; if (this.goTextT <= 0) this.hud.hideCountdown(); }
     }
@@ -289,7 +396,7 @@ export class Game {
   simStep() {
     const w = this.world, car = w.player;
     if (car.state !== 'finished' && car.state !== 'eliminated') {
-      if (this.autopilot) drivePlayerProxy(car, this.autoBrain, w);
+      if (this.autopilot || this.autoDrive) drivePlayerProxy(car, this.autoBrain, w);
       else {
         const kb = this.keyboard.update(STEP);
         // tilt wins when the phone reports motion; touch-halves steering is only a fallback
@@ -304,6 +411,7 @@ export class Game {
   enterSpectate() {
     this.state = 'spectate';
     const p = this.world.player;
+    if (this.net) this.net.send({ t: 'finish', raceTime: p.finishTime != null ? p.finishTime : 3599 });
     if (p.state === 'eliminated') this.hud.setSpectate(true, 'נדרסת! 🫓 צופים בשאר המרוץ');
     else { this.sound.finish(p.place === 1); this.hud.setSpectate(true, p.place === 1 ? 'סיימת ראשון! 🏆' : `סיימת במקום ${p.place}`); }
     this.hud.setDanger(0);
@@ -317,6 +425,7 @@ export class Game {
     this.hud.setDanger(0);
     this.hud.showResults(this.world.finalOrder(), this.world.player);
     this.skipping = false;
+
   }
 
   /** Spectator camera follows the best-placed car that is still racing. */

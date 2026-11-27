@@ -11,8 +11,8 @@ import { generateBoxes } from './boxLayout.js';
 import { useItem, stepGun, stepBoxes } from './items.js';
 import { stepEntities } from './entities.js';
 
-export const BOT_NAMES = ['טורבו-טל', 'רוני רוקט', 'מאיה מהירה', 'דני דיונה', 'שירה שמן', 'אבי אבק', 'נועה נייטרו', 'יוסי יעלון'];
-export const BOT_COLORS = [0xf5c400, 0x1e6fff, 0x18b04a];
+import { BOT_NAMES, BOT_COLORS } from './botNames.js';
+export { BOT_NAMES, BOT_COLORS };
 const GRID = [[-6, -3], [-6, 3], [-12, -3], [-12, 3]];
 
 function shuffle(arr, rng) {

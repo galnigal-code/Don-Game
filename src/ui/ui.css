@@ -159,3 +159,25 @@ button.big:disabled { opacity: .4; }
 #hud-dots .rdot { position: absolute; top: 50%; margin: -11px 0 0 -11px; font-size: 18px; line-height: 1; z-index: 3; text-shadow: 0 0 4px #000; font-style: normal; filter: drop-shadow(0 0 3px #f00); }
 #standings .row.out { opacity: .55; }
 #result-title.flat { color: #ff8a70; }
+
+/* ---- play with friends (V3) ---- */
+.panel input { font: inherit; font-size: clamp(18px, 5vmin, 26px); width: min(14em, 100%); padding: 8px 12px; margin: 6px 0; border-radius: 10px; border: 2px solid rgba(255,255,255,.5); background: rgba(0,0,0,.35); color: #fff; text-align: center; }
+#in-code { letter-spacing: .4em; text-transform: uppercase; }
+.colors { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin: 6px 0 8px; }
+.colors button { width: clamp(30px, 8vmin, 42px); height: clamp(30px, 8vmin, 42px); border-radius: 50%; border: 3px solid transparent; padding: 0; touch-action: manipulation; }
+.colors button.on { border-color: #fff; box-shadow: 0 0 0 2px #000, 0 0 10px #fff; }
+#lobby-screens .code { letter-spacing: .25em; color: #fff; margin-inline-start: .3em; }
+#lobby-players, #lobby-last, #lobby-board { margin: 6px auto; max-width: 420px; }
+.pl { display: flex; align-items: center; gap: 8px; padding: 4px 10px; margin: 3px 0; border-radius: 10px; background: rgba(255,255,255,.1); font-size: clamp(13px, 3.6vmin, 17px); text-align: right; }
+.pl i { width: 14px; height: 14px; border-radius: 50%; flex: 0 0 14px; }
+.pl .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pl .st { opacity: .85; font-size: .9em; }
+.pl .n { width: 1.4em; opacity: .7; }
+.pl.off { opacity: .5; }
+.pl.me { background: rgba(255,210,63,.22); }
+.sub { margin-top: 8px; font-weight: 700; color: #ffd23f; font-size: clamp(13px, 3.6vmin, 17px); }
+#emoji-bar { position: absolute; top: calc(158px + var(--safe-t)); left: calc(12px + var(--safe-l)); display: flex; flex-direction: column; gap: 6px; z-index: 30; pointer-events: auto; }
+#emoji-bar[hidden] { display: none; }
+#emoji-bar button { width: 40px; height: 40px; border-radius: 50%; border: 2px solid rgba(255,255,255,.55); background: rgba(0,0,0,.3); font-size: 20px; padding: 0; touch-action: manipulation; }
+button.big.alt { font-size: clamp(15px, 4.4vmin, 22px); padding: 8px 22px; background: #fff; color: #3a2400; }
+#menu-online { gap: 10px; margin-top: 8px; }
