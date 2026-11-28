@@ -134,14 +134,14 @@ describe('RoomCore: finishing and scores', () => {
     r.disconnect(ids[1], 5000); r.onMessage(ids[0], { t: 'finish', raceTime: 80 }, 90000);
     expect(r.phase).toBe('results');
   });
-  it('returns to the lobby with the same code, scores kept, calibration reset', () => {
+  it('returns to the lobby with the same code, scores kept, calibration kept (nobody calibrates between races)', () => {
     const { r, ids } = race(2);
     r.onMessage(ids[0], { t: 'finish', raceTime: 80 }, 90000); r.onMessage(ids[1], { t: 'finish', raceTime: 85 }, 90000);
     r.tick(90000 + ROOM.RESULTS_MS);
     expect(r.phase).toBe('lobby'); expect(r.code).toBe('KRTM');
-    expect([...r.players.values()].every((p) => !p.calibrated)).toBe(true);
+    expect([...r.players.values()].every((p) => p.calibrated)).toBe(true);
     expect(r.scores.get(r.players.get(ids[0]).token).points).toBe(10);
-    ready(r, ids); r.onMessage(ids[0], { t: 'start_now' }, 100000);
+    r.onMessage(ids[0], { t: 'start_now' }, 100000);      // no `ready()` here: they are still calibrated
     expect(r.phase).toBe('racing'); expect(r.raceNo).toBe(2);
   });
   it('points add up over races', () => {

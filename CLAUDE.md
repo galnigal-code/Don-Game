@@ -18,6 +18,7 @@ Mobile-browser 3D racing game prototype (Three.js + Vite). Tilt-to-steer, auto-f
 - M2 requires the user to test tilt on a real Android phone. Stop and ask them before moving past M2.
 - **The giant roller (V2-C) was built and then CANCELLED by the user on 2026-11-26** (not visible with a chase camera). It is shelved: `CONFIG.roller.ENABLED = false`, code and tests kept, `?roller=1` brings it back for testing. Do NOT enable it by default. The rule is back to: no car can ever be eliminated.
 - V2-D (realism) is built and deployed.
+- **Version 4 (built): calibrate once, no slowdown on sand, no falling (cliff guard rails, trenches filled), no fixed obstacles, track map.** `docs/PLAN_V4.md`. `npm run smoke:ui` checks the map layout.
 - **Version 3 (built V3-A..V3-D, awaiting the user's real-phone test): play with friends.** `docs/PLAN_V3.md` + `docs/TECH_SPEC_V3.md`. Cloudflare Workers + Durable Objects room server (`server/`), pure room logic in `src/net/room/`, each phone owns its car, host owns bots, server arbitrates boxes/finish/scores. Build V3-A -> V3-D. "Race vs computer" must stay unchanged.
 - Communicate with the user in Hebrew.
 
@@ -36,7 +37,11 @@ It now comes from a guided calibration that only reacts to HELD poses, plus jump
 The rules, which every change must keep:
 1. Phone turned CLOCKWISE (right edge down) => steer RIGHT; counter-clockwise => LEFT. +steer = +d = right side of the road = right half of the screen.
 2. The nose of the car points forward (-z); the road bends right when curvature > 0; keyboard/touch right = +steer.
-3. Direction is measured on the device on every calibration (never restored from storage). `Start` stays disabled until the protocol finished.
+3. Direction is measured on the device by the guided protocol (`Start` stays disabled until it finished) and, since V4 (user decision 28.11.2026),
+   REMEMBERED per screen side (`dongame.dir`). Only a completed guided protocol or the "↔" button writes it; fidgeting, picking the phone
+   up or rotating the screen never does. With a remembered direction there is no calibration screen: the centre is taken from how the phone
+   is held during the 3-2-1 (`beginAutoZero/sampleAutoZero/finishAutoZero`). "כייל מחדש" (menu / lobby / results) forgets it.
+   A wrong "straight" may only BLOCK the protocol, never reverse the wheel (tests: tilt.test.js "protocol safety").
 4. During a race a visible "↔" button flips the direction instantly.
 
 Before saying anything about direction is "fixed" or pushing a change that touches `src/input`, `src/render`, `src/sim/Car.js`, `src/sim/TrackModel.js`

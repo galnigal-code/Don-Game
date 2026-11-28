@@ -55,10 +55,11 @@ describe('ramp geometry', () => {
 });
 
 describe('jumping', () => {
-  it('there are 3-4 ramps, at least two with a gap', () => {
+  it('there are 3-4 ramps and (V4) no trench after any of them: nobody can fall', () => {
     expect(RAMPS.length).toBeGreaterThanOrEqual(3);
     expect(RAMPS.length).toBeLessThanOrEqual(4);
-    expect(gapRamps.length).toBeGreaterThanOrEqual(2);
+    expect(gapRamps.length).toBe(0);
+    for (let s = 0; s < track.finishS; s += 1) expect(track.inGap(s)).toBe(false);
   });
   it('a ramp without a gap is a hop: air time, no fall', () => {
     const r = jump(RAMPS[0], C.CRUISE_SPEED);
@@ -86,12 +87,8 @@ describe('jumping', () => {
       expect(r.car.lastCheckpointS).toBeLessThan(ramp.gap.from);
     }
   });
-  it('a car that is already past the gap line on the ground (e.g. respawned there) falls too', () => {
-    const car = createCar({ s: gapRamps[0].gap.from + 4, d: 0 });
-    car.speed = 10; car.input.speedMult = 0.3;
-    for (let i = 0; i < 10; i++) stepCar(car, DT, track);
-    expect(car.state).toBe('falling');
-  });
+  // (V4) the 'falls into the trench' tests were removed together with the trenches
+
   it('airborne cars cannot be steered', () => {
     const car = createCar({ s: RAMPS[0].s - 40, d: 0 });
     car.speed = C.CRUISE_SPEED;
@@ -121,17 +118,8 @@ describe('track layout is sane', () => {
     const sorted = [...RAMPS].sort((a, b) => a.s - b.s);
     for (let i = 1; i < sorted.length; i++) expect(sorted[i].s - sorted[i - 1].s).toBeGreaterThan(300);
   });
-  it('fixed obstacles are on the road, away from ramps, and not in a fully blocked row', () => {
-    expect(FIXED_OBSTACLES.length).toBeGreaterThanOrEqual(8);
-    for (const o of FIXED_OBSTACLES) {
-      const hw = track.sample(o.s).halfWidth;
-      expect(Math.abs(o.d)).toBeLessThan(hw - 1.5);
-      expect(inZones(o.s, rampZones), `obstacle at ${o.s}`).toBe(false);
-    }
-    const rows = new Map();
-    for (const o of FIXED_OBSTACLES) rows.set(o.s, (rows.get(o.s) || 0) + 1);
-    for (const n of rows.values()) expect(n).toBeLessThanOrEqual(2);
-  });
+  it('V4: there are no fixed obstacles on the road (only what players drop)', () => { expect(FIXED_OBSTACLES.length).toBe(0); });
+
   it('the whole race still takes about 90 s', () => {
     expect(track.finishS / C.CRUISE_SPEED).toBeGreaterThan(85);
     expect(track.finishS / C.CRUISE_SPEED).toBeLessThan(95);

@@ -1,5 +1,5 @@
 // Menu and calibration screens (Hebrew, RTL).
-export function createScreens(root, tilt, { onPlay, onStart, onCreate, onJoin }) {
+export function createScreens(root, tilt, { onPlay, onStart, onCreate, onJoin, onRecalibrate }) {
   const el = document.createElement('div');
   el.id = 'screens';
   el.innerHTML = `
@@ -12,6 +12,7 @@ export function createScreens(root, tilt, { onPlay, onStart, onCreate, onJoin })
           <button class="big alt" id="btn-create">פתח חדר</button>
           <button class="big alt" id="btn-join">הצטרף לחדר</button>
         </div>
+        <button class="ghost" id="btn-menu-recal" hidden>כייל מחדש</button>
         <p class="hint" id="hint-menu" hidden>לחוויה הכי טובה החזק את הטלפון לרוחב</p>
       </div>
     </div>
@@ -49,6 +50,7 @@ export function createScreens(root, tilt, { onPlay, onStart, onCreate, onJoin })
   $('btn-play').addEventListener('click', () => onPlay());
   $('btn-create').addEventListener('click', () => onCreate());
   $('btn-join').addEventListener('click', () => onJoin());
+  $('btn-menu-recal').addEventListener('click', () => onRecalibrate());
   $('btn-start').addEventListener('click', () => onStart());
   $('btn-invert').addEventListener('click', () => tilt.flipDirection());
   $('btn-redo').addEventListener('click', () => tilt.beginProtocol());
@@ -63,7 +65,7 @@ export function createScreens(root, tilt, { onPlay, onStart, onCreate, onJoin })
 
   let openedAt = 0, visible = null;
   const api = {
-    showMenu(online = false) { visible = 'menu'; menu.hidden = false; calib.hidden = true; $('menu-online').hidden = !online; $('hint-menu').hidden = !portrait(); },
+    showMenu(online = false, calibrated = false) { visible = 'menu'; menu.hidden = false; calib.hidden = true; $('menu-online').hidden = !online; $('btn-menu-recal').hidden = !calibrated; $('hint-menu').hidden = !portrait(); },
     setStartLabel(text) { $('btn-start').textContent = text; },
     showCalibrate() {
       visible = 'calib'; menu.hidden = true; calib.hidden = false; openedAt = performance.now();

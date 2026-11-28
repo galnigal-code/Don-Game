@@ -116,6 +116,23 @@ export function createTrack(path = TRACK_PATH, segments = SEGMENTS, ramps = RAMP
     sm.halfWidth = info.hw; sm.edgeLeft = info.edgeLeft; sm.edgeRight = info.edgeRight;
   }
 
+  // V4: the sand shoulder narrows smoothly (a funnel, 30 m long) into the next wall / guard rail on that side, so a car on the
+  // shoulder is guided back to the road instead of being teleported when the barrier starts.
+  const FUNNEL = 30, SE = CONFIG.track.SAND_EXTRA, HALF = CONFIG.car.HALF_WIDTH;
+  for (const [edgeKey, limKey] of [['edgeLeft', 'sandLimL'], ['edgeRight', 'sandLimR']]) {
+    let next = null;                                    // index of the closest barrier sample at or ahead of k
+    for (let k = n - 1; k >= 0; k--) {
+      const sm = samples[k];
+      if (sm[edgeKey] !== 'sand') next = k;
+      let lim = sm.halfWidth + SE;
+      if (next != null && sm[edgeKey] === 'sand') {
+        const dist = (next - k) * STEP;
+        if (dist < FUNNEL) { const inner = samples[next].halfWidth - HALF; lim = inner + (lim - inner) * (dist / FUNNEL); }
+      }
+      sm[limKey] = lim;
+    }
+  }
+
   const minS = -LEAD_IN;
   const maxS = minS + (n - 1) * STEP;
   const finishS = maxS - RUN_OUT;
@@ -142,6 +159,7 @@ export function createTrack(path = TRACK_PATH, segments = SEGMENTS, ramps = RAMP
       out.halfWidth = lerp(A.halfWidth, B.halfWidth);
       const near = f < 0.5 ? A : B;
       out.edgeLeft = near.edgeLeft; out.edgeRight = near.edgeRight;
+      out.sandLimL = lerp(A.sandLimL, B.sandLimL); out.sandLimR = lerp(A.sandLimR, B.sandLimR);
       return out;
     },
     /** Height of the driving surface above the road plane (non-zero only on a ramp slope). */

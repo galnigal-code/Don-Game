@@ -254,7 +254,7 @@ export class RoomCore {
 
   backToLobby(now) {
     this.phase = 'lobby'; this.resultsEnd = null; this.roster = [];
-    for (const p of this.players.values()) { p.inRace = false; p.finish = null; p.calibrated = false; }   // the direction is measured again before every race (direction contract)
+    for (const p of this.players.values()) { p.inRace = false; p.finish = null; }   // the phone remembers its calibration: nobody calibrates between races
     this.refreshTimer(now);
     this.pushRoom();
   }

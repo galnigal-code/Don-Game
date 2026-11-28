@@ -13,8 +13,9 @@ const srv = await startDevServer({ port: 8799, delayMs: 120, lobbyTimerMs: 4000,
 const server = 'http://localhost:8799';
 const browser = await chromium.launch({ args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader'] });
 const pages = [];
-async function newPlayer(name, url) {
+async function newPlayer(name, url, { saved = false } = {}) {
   const ctx = await browser.newContext({ viewport: { width: 640, height: 360 } });
+  if (saved) await ctx.addInitScript(() => localStorage.setItem('dongame.dir', JSON.stringify({ v: 1, invert: false, byAngle: {} })));   // calibrated on an earlier visit
   const page = await ctx.newPage();
   const errs = []; page.on('pageerror', (e) => errs.push(e.message)); page.on('console', (m) => { if (m.type() === 'error' && !/GPU stall|favicon|Failed to load resource/.test(m.text())) errs.push(m.text()); });
   await page.goto(url);
@@ -81,8 +82,7 @@ try {
   ok(codeAfter === code, 'same room code after the race (no new code needed)');
   const last = await A.page.textContent('#lobby-last');
   ok(/\+10/.test(last), 'winner got 10 points');
-  await A.page.waitForSelector('#btn-start:not([disabled])', { timeout: 15000 });
-  await A.page.click('#btn-start');
+  ok(await A.page.evaluate(() => window.__game.state === 'lobby' && document.getElementById('scr-calib').hidden), 'V4: no calibration between races (straight back to the lobby)');
   await A.page.waitForFunction(() => document.querySelectorAll('#lobby-board .pl').length === 4, null, { timeout: 8000 });
   ok(true, 'the room score table lists all 4 players');
 
@@ -104,10 +104,10 @@ try {
     await H.page.fill('#in-name', 'מארח'); await H.page.click('#btn-profile-go');
     await H.page.waitForSelector('#btn-start:not([disabled])', { timeout: 15000 }); await H.page.click('#btn-start');
     await H.page.waitForSelector('#scr-lobby:not([hidden])'); const code2 = (await H.page.textContent('#lobby-code')).trim();
-    const J = await newPlayer('J', `${base}?${q2}&room=${code2}`);
+    const J = await newPlayer('J', `${base}?${q2}&room=${code2}`, { saved: true });
     await J.page.waitForSelector('#in-name', { state: 'visible', timeout: 15000 }); await J.page.fill('#in-name', 'אורח'); await J.page.click('#btn-profile-go');
-    await J.page.waitForSelector('#btn-start:not([disabled])', { timeout: 15000 }); await J.page.click('#btn-start');
-    await J.page.waitForSelector('#scr-lobby:not([hidden])');
+    await J.page.waitForSelector('#scr-lobby:not([hidden])', { timeout: 15000 });
+    ok(await J.page.evaluate(() => document.getElementById('scr-calib').hidden), 'V4: a player who calibrated on an earlier visit goes straight to the lobby (no calibration screen)');
     await H.page.waitForSelector('#btn-lobby-start', { state: 'visible', timeout: 8000 }); await H.page.click('#btn-lobby-start');
     await J.page.waitForFunction(() => window.__game.world?.online && window.__game.state === 'racing', null, { timeout: 20000 });
     ok(await J.page.evaluate(() => window.__game.world.cars.length === 4 && window.__game.world.cars.filter((c) => c.kind === 'bot').length === 2), '2 humans + 2 bots complete the field to 4');

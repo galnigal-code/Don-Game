@@ -12,7 +12,7 @@ export const TRACK_PATH = [[LEAD_IN, 0], ...RACE, [RUN_OUT, 0]];
 
 // Special sections, by s range (relative to the start line).
 //  canyon: narrow road with rock walls on both sides.
-//  cliff : no fence on one side - driving off it means falling (respawn at checkpoint).
+//  cliff : a drop on one side, protected by a low metal guard rail (V4: nobody can fall off the track).
 export const SEGMENTS = [
   { from: 640, to: 780, type: 'cliff', side: 'left' },
   { from: 1180, to: 1400, type: 'canyon' },
@@ -32,16 +32,11 @@ export function heightAt(s) {
 // Flight distance = speed * 2*launchVy/gravity, so a ramp needs at least ~21 m/s to clear a 16 m gap.
 export const RAMPS = [
   { s: 420, rise: 1.4, len: 6, launchVy: 11, gap: null },                      // just a hop
-  { s: 980, rise: 1.4, len: 6, launchVy: 11, gap: { from: 984, to: 1000 } },
-  { s: 1630, rise: 1.4, len: 6, launchVy: 11, gap: { from: 1634, to: 1650 } },
-  { s: 2450, rise: 1.4, len: 6, launchVy: 11, gap: { from: 2454, to: 2470 } },
+  { s: 980, rise: 1.4, len: 6, launchVy: 11, gap: null },                     // V4: the trenches were filled, the ramps stay as jumps
+  { s: 1630, rise: 1.4, len: 6, launchVy: 11, gap: null },
+  { s: 2450, rise: 1.4, len: 6, launchVy: 11, gap: null },
 ];
 
 // Fixed obstacles: barrels break when hit, rocks stay. Both cost a bump (~1 s slow).
-export const FIXED_OBSTACLES = [
-  { s: 540, d: 3.5, kind: 'barrel' }, { s: 600, d: -4, kind: 'rock' },
-  { s: 880, d: -3, kind: 'barrel' }, { s: 880, d: 4, kind: 'barrel' },
-  { s: 1100, d: 0, kind: 'rock' }, { s: 1220, d: -2.5, kind: 'rock' }, { s: 1340, d: 2.5, kind: 'barrel' },
-  { s: 1480, d: -4, kind: 'barrel' }, { s: 1800, d: 3, kind: 'rock' }, { s: 2100, d: -3.5, kind: 'barrel' },
-  { s: 2300, d: 4, kind: 'rock' }, { s: 2560, d: -3, kind: 'barrel' }, { s: 2700, d: 2, kind: 'rock' },
-];
+// V4: no fixed obstacles on the road any more; only what the players and bots drop (user decision).
+export const FIXED_OBSTACLES = [];

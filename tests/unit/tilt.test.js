@@ -98,6 +98,10 @@ const expectContract = (m, label = '') => {
   expect(Math.abs(s[0]), `${label} middle -> straight`).toBeLessThan(0.1);
 };
 
+const store = new Map();
+globalThis.localStorage = { getItem: (k) => (store.has(k) ? store.get(k) : null), setItem: (k, v) => store.set(k, String(v)), removeItem: (k) => store.delete(k) };
+beforeEach(() => store.clear());
+
 describe('guided calibration protocol', () => {
   it('walks neutral -> right -> left -> centre -> done and satisfies the contract', () => {
     const m = rig(); m.t.beginProtocol(); m.hold(100);
@@ -163,9 +167,10 @@ describe('guided calibration protocol', () => {
     m.to(60, 40); m.hold(300);
     expect(m.t.jumps).toBe(0); expect(m.t.steer).toBeGreaterThan(0.9);
   });
-  it('the direction is measured every time and never restored from storage', () => {
+  it('a new TiltInput does not know a direction until a guided calibration saved one', () => {
     const a = rig({ mirrorX: true }); a.t.beginProtocol(); a.protocol(); expect(a.t.invert).toBe(true);
-    const b = rig(); expect(b.t.invert).toBe(false);
+    store.clear();                                           // a different phone / cleared data
+    const b = rig(); expect(b.t.invert).toBe(false); expect(b.t.hasSavedDirection).toBe(false);
   });
   it('Start is available without a sensor, and the manual flip reverses the mapping', () => {
     const t = new TiltInput(); t.beginProtocol();
@@ -192,6 +197,98 @@ describe('guided calibration protocol', () => {
       for (let attempt = 0; attempt < 3 && m.t.step !== 'done'; attempt++) m.protocol();
       expect(m.t.step, `seed ${seed}`).toBe('done');
       expectContract(m, `seed ${seed} ${JSON.stringify(o)}`);
+    }
+  });
+});
+
+
+/** The 3-2-1: the game samples the pose every frame for about a second. */
+const countdown = (m) => { m.t.beginAutoZero(); for (let i = 0; i < 60; i++) { m.hold(16); m.t.sampleAutoZero(); } return m.t.finishAutoZero(); };
+
+describe('calibrate once (V4-A)', () => {
+  /** First visit: full protocol. Returns the rig; its storage stays for the "second visit". */
+  const firstVisit = (o = {}) => { const m = rig(o); m.t.isIOS = !!o.flipSign; m.t.beginProtocol(); m.protocol(); expect(m.t.step).toBe('done'); return m; };
+  /** Second visit: a fresh TiltInput (page reload) that uses the remembered direction and sets the centre during the countdown. */
+  const secondVisit = (o = {}, held = 0) => {
+    const m = rig(o); m.t.isIOS = !!o.flipSign;
+    m.hold(800); m.to(held, 300); m.hold(600);               // the player picks up the phone and holds it the way they like
+    expect(m.t.hasSavedDirection).toBe(true);
+    expect(m.t.useSavedDirection()).toBe(true);
+    expect(countdown(m)).toBe(true);                         // the 3-2-1
+    return m;
+  };
+
+  it('the first guided calibration saves the direction; the second visit needs no protocol and still obeys the contract', () => {
+    for (const rest of RESTS) for (const o of [{}, { mirrorX: true }, { flipSign: true }, { mirrorX: true, flipSign: true }]) {
+      firstVisit({ rest, ...o });
+      const m = secondVisit({ rest, ...o });
+      expect(m.t.step).toBe('done');
+      expectContract(m, JSON.stringify({ rest, ...o }));
+      store.clear();
+    }
+  });
+  it('the centre follows how the phone is held now (tilted 15 degrees: still straight there)', () => {
+    firstVisit({ rest: 90 });
+    const m = secondVisit({ rest: 90 }, 15);
+    expect(Math.abs(m.t.steer)).toBeLessThan(0.1);
+    m.to(15 + 22, 300); m.hold(500); expect(m.t.steer).toBeGreaterThan(0.2);
+    m.to(15 - 22, 300); m.hold(500); expect(m.t.steer).toBeLessThan(-0.2);
+  });
+  it('holding the phone on the OTHER landscape side than last time is still correct', () => {
+    firstVisit({ rest: 90 }); globalThis.screen.orientation.angle = 90;
+    globalThis.screen.orientation.angle = 270;
+    const m = secondVisit({ rest: 270 });
+    expectContract(m, 'other side');
+  });
+  it('fidgeting before Play, or before the 3-2-1, never changes the remembered direction', () => {
+    firstVisit({ mirrorX: true });
+    const saved = JSON.stringify([...store.entries()]);
+    const m = rig({ mirrorX: true }); m.hold(500); m.to(40, 200); m.to(-40, 200); m.to(30, 200); m.hold(800); m.to(-35, 300); m.hold(900);
+    expect(JSON.stringify([...store.entries()])).toBe(saved);
+    expect(m.t.useSavedDirection()).toBe(true); m.to(0, 300); m.hold(600);
+    countdown(m); expectContract(m, 'after fidgeting');
+  });
+  it('the flip button changes the remembered direction for next time', () => {
+    firstVisit();
+    const a = secondVisit(); a.t.flipDirection(); expect(a.contract()[22]).toBeLessThan(0);
+    const b = rig(); b.hold(500); b.t.useSavedDirection(); expect(b.t.invert).toBe(true);        // the flip survived the reload
+  });
+  it('"calibrate again" forgets it', () => {
+    firstVisit(); const t = new TiltInput(); expect(t.hasSavedDirection).toBe(true);
+    t.forgetDirection(); expect(t.hasSavedDirection).toBe(false); expect(new TiltInput().hasSavedDirection).toBe(false);
+  });
+  it('a pose far from the calibrated centre (phone put down) is not taken as the new centre', () => {
+    const m = firstVisit(); const z0 = m.t.zero;
+    m.to(70, 300); m.hold(600);
+    expect(countdown(m)).toBe(false); expect(m.t.zero).toBe(z0);
+  });
+  it('without a sensor nothing is saved and the auto centre does nothing', () => {
+    const t = new TiltInput(); t.beginAutoZero(); t.sampleAutoZero(); expect(t.finishAutoZero()).toBe(false);
+    expect(t.useSavedDirection()).toBe(false);
+  });
+});
+
+describe('calibrate once: regression found by the real-browser test', () => {
+  it('second visit: Play tapped in portrait, phone then turned to landscape before the 3-2-1 -> centre is the landscape pose', () => {
+    const a = rig({ rest: 90 }); a.t.beginProtocol(); a.protocol(); expect(a.t.step).toBe('done');
+    const m = rig({ rest: 0 }); m.hold(800);
+    m.t.useSavedDirection();                                   // tapped Play while still in portrait
+    for (let i = 1; i <= 10; i++) { m.rest = 9 * i; m.hold(50); }   // turns the phone to landscape
+    m.t.beginAutoZero(); for (let i = 0; i < 60; i++) { m.hold(16); m.t.sampleAutoZero(); }
+    expect(m.t.finishAutoZero()).toBe(true);
+    expectContract(m, 'portrait -> landscape after Play');
+  });
+});
+
+describe('protocol safety: "straight" captured while the phone was still turning (seen on a slow real-browser run)', () => {
+  it('a wrong straight can block the protocol, but it NEVER reverses the wheel', () => {
+    for (const rest of [90, 270]) for (const mid of [0.6, 0.75, 0.9]) for (const o of [{}, { mirrorX: true }]) {
+      const m = rig({ ...o, rest: 0 }); m.t.beginProtocol();
+      for (let i = 1; i <= 10; i++) { m.rest = rest * mid * i / 10; m.hold(30); }
+      m.hold(1200);                                             // paused half way: "hold straight" completes there
+      m.rest = rest; m.hold(200);
+      m.to(22, 400); m.hold(800); m.to(-22, 700); m.hold(800); m.to(0, 500); m.hold(1100);
+      if (m.t.step === 'done') expectContract(m, `${rest} ${mid} ${JSON.stringify(o)}`);
     }
   });
 });

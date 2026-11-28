@@ -14,7 +14,8 @@
     "smoke:perf": "node tests/smoke-perf.mjs",
     "test:direction": "vitest run tests/unit/directions.test.js tests/unit/tilt.test.js && node tests/real-sensor.mjs",
     "dev:server": "node tools/dev-server.mjs",
-    "smoke:mp": "node tests/mp-smoke.mjs"
+    "smoke:mp": "node tests/mp-smoke.mjs",
+    "smoke:ui": "node tests/smoke-ui.mjs"
   },
   "dependencies": {
     "three": "0.186.1"

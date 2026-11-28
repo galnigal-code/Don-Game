@@ -2,6 +2,7 @@ import { CONFIG } from '../config.js';
 import { DEG, wrapPi, rollFromMotion, smoothAngle, steerFromRoll } from './tiltMath.js';
 
 const KEY = 'dongame.calib';
+const DIR_KEY = 'dongame.dir';
 
 export function detectIOS() {
   const ua = navigator.userAgent || '';
@@ -18,7 +19,7 @@ const P = {
   CENTER_MS: 700,               // hold the middle this long
   TILT_MIN: 14 * DEG,           // a real tilt
   CENTER_TOL: 10 * DEG,         // "back in the middle"
-  REPOSITION: 55 * DEG,         // a hold this far from "straight" is re-positioning the phone (e.g. portrait -> landscape), not steering
+  REPOSITION: 42 * DEG,         // a hold this far from "straight" is re-positioning the phone (e.g. portrait -> landscape), not steering
   JUMP: 20 * DEG,               // a one-sample jump right after the screen rotated = a frame change, not motion
   JUMP_WINDOW_MS: 600,
 };
@@ -52,8 +53,54 @@ export class TiltInput {
     try {
       const j = JSON.parse(localStorage.getItem(KEY) || 'null');
       if (j && ['low', 'normal', 'high'].includes(j.sensitivity)) this.sensitivity = j.sensitivity;
-      // the learned direction is NOT restored: it is measured again on every calibration
     } catch { /* storage unavailable */ }
+    // The direction measured by a COMPLETED guided calibration (or set with the flip button) is remembered per screen side,
+    // so the player calibrates once. Nothing else ever writes it: fidgeting, picking the phone up or rotating the screen cannot.
+    this.savedDir = null;
+    try {
+      const d = JSON.parse(localStorage.getItem(DIR_KEY) || 'null');
+      if (d && d.v === 1 && typeof d.invert === 'boolean') this.savedDir = { v: 1, invert: d.invert, byAngle: { ...(d.byAngle || {}) } };
+    } catch { /* storage unavailable */ }
+  }
+  static screenAngle() { return globalThis.screen?.orientation?.angle ?? globalThis.window?.orientation ?? 0; }
+  writeDir() { try { if (this.savedDir) localStorage.setItem(DIR_KEY, JSON.stringify(this.savedDir)); else localStorage.removeItem(DIR_KEY); } catch { /* ignore */ } }
+
+  /** True when a previous guided calibration left a direction for this device. */
+  get hasSavedDirection() { return !!this.savedDir; }
+  /** Remember the direction that was just measured (called only when the guided protocol finished). */
+  saveDirection() {
+    const a = TiltInput.screenAngle();
+    this.savedDir = { v: 1, invert: this.invert, byAngle: { ...(this.savedDir?.byAngle || {}), [a]: this.invert } };
+    this.writeDir();
+  }
+  /** Use the remembered direction instead of running the protocol; the centre is taken from the pose held right now. */
+  useSavedDirection() {
+    if (!this.savedDir) return false;
+    const a = TiltInput.screenAngle();
+    this.invert = this.savedDir.byAngle[a] ?? this.savedDir.invert;
+    this.step = 'done'; this.protocolOn = false; this.calibrated = true; this.zeroTrusted = false;   // the centre comes from the 3-2-1
+    if (this.hasSample) this.zero = this.neutral ?? this.roll;
+    return true;
+  }
+  /** "Calibrate again": forget the remembered direction. */
+  forgetDirection() { this.savedDir = null; this.writeDir(); }
+
+  /* The centre ("straight") is set again for every race from the pose the player holds while the 3-2-1 runs. */
+  beginAutoZero() { this.az = { sx: 0, sy: 0, n: 0 }; }
+  sampleAutoZero() {
+    if (!this.az || !this.active) return;
+    this.az.sx += Math.cos(this.roll); this.az.sy += Math.sin(this.roll); this.az.n++;
+  }
+  /** Returns true when the centre was updated. A pose very far from the calibrated centre is ignored (the phone was put down). */
+  finishAutoZero() {
+    const a = this.az; this.az = null;
+    if (!a || a.n < 8) return false;
+    const z = Math.atan2(a.sy, a.sx);
+    // after a guided calibration the centre is known: a pose very far from it means the phone was put down. Without one (remembered
+    // direction) the 3-2-1 pose IS the centre, whatever it is (the phone was just turned from portrait to landscape).
+    if (this.zeroTrusted && Math.abs(wrapPi(z - this.zero)) > 40 * DEG) return false;
+    this.zero = z; this.calibrated = true; this.zeroTrusted = true;
+    return true;
   }
   save() {
     try { localStorage.setItem(KEY, JSON.stringify({ sensitivity: this.sensitivity })); } catch { /* ignore */ }
@@ -160,17 +207,24 @@ export class TiltInput {
         this.step = 'left';
       }
     } else if (this.step === 'left') {
+      // must be on the OTHER side of straight: a wrong "straight" can only block the protocol, never reverse the wheel
       if (held(P.TILT_MS) && Math.abs(exc) >= P.TILT_MIN && Math.sign(exc) === -this.rightSign) this.step = 'center';
     } else if (this.step === 'center') {
       if (held(P.CENTER_MS) && Math.abs(exc) <= P.CENTER_TOL) {
-        this.zero = this.holdRef; this.calibrated = true; this.step = 'done';
-        this.save();
+        this.zero = this.holdRef; this.calibrated = true; this.step = 'done'; this.zeroTrusted = true;
+        this.save(); this.saveDirection();
       }
     }
   }
 
   /** Manual override ("flip direction" button): keeps the calibration, just reverses the mapping. */
-  flipDirection() { this.invert = !this.invert; this.save(); }
+  flipDirection() {
+    this.invert = !this.invert; this.save();
+    // the flip says the remembered direction was wrong for this device: remember the new one for every screen side
+    const a = TiltInput.screenAngle();
+    this.savedDir = { v: 1, invert: this.invert, byAngle: { [a]: this.invert } };
+    this.writeDir();
+  }
 
   /** Called by the Start button. With a finished protocol the zero is already set. */
   calibrate() {

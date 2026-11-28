@@ -85,6 +85,7 @@ export function buildTrackMesh(track) {
     road: mat(0xffffff, { map: roadTexture() }),
     markings: new THREE.MeshLambertMaterial({ map: markingsTexture(), transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }),
     sand: mat(0xd9b27a), ground: mat(0xc99458), wood: mat(0x8a5a30),
+    rail: new THREE.MeshLambertMaterial({ color: 0xc9ced6, side: THREE.DoubleSide, emissive: 0x222428 }), railPost: mat(0x6d7178),
     rock: mat(0xa04a2a), rockTop: mat(0xb8643a), cliff: mat(0x8f4426),
   };
   const roadFallback = materials.road.map;
@@ -100,10 +101,11 @@ export function buildTrackMesh(track) {
   function side(sm, sd, edge) {
     const hw = sm.halfWidth;
     if (edge === 'sand') {
-      const a = P(sm, sd * hw, -0.02), b = P(sm, sd * (hw + SE), -0.05);
+      const out = (sd < 0 ? sm.sandLimL : sm.sandLimR) ?? hw + SE;   // the shoulder narrows into a following wall / guard rail (V4)
+      const a = P(sm, sd * hw, -0.02), b = P(sm, sd * out, -0.05);
       S('sand', sd).row(a, b, 0, flat(a), flat(b));
-      S('wood', sd).row(P(sm, sd * (hw + SE), -0.3), P(sm, sd * (hw + SE), 1.2));
-      const c = P(sm, sd * (hw + SE), -0.2), d = P(sm, sd * (hw + SE + 100), -2.0);   // slopes down to meet the terrain
+      S('wood', sd).row(P(sm, sd * out, -0.3), P(sm, sd * out, 1.2));
+      const c = P(sm, sd * out, -0.2), d = P(sm, sd * (out + 100), -2.0);   // slopes down to meet the terrain
       S('ground', sd).row(c, d, 0, flat(c), flat(d));
     } else if (edge === 'wall') {
       const a = P(sm, sd * hw, -0.3), b = P(sm, sd * hw, 8), c = P(sm, sd * (hw + 100), 6);
@@ -112,6 +114,8 @@ export function buildTrackMesh(track) {
     } else { // cliff
       const a = P(sm, sd * hw, -0.3), b = P(sm, sd * hw, -30), c = P(sm, sd * (hw + 100), -30);
       S('cliff', sd).row(a, b, 0, wall(sm, a), wall(sm, b));
+      S('rail', sd).row(P(sm, sd * (hw + 0.1), 0.35), P(sm, sd * (hw + 0.1), 0.95));        // V4: metal guard rail, nobody falls
+      S('railPost', sd).row(P(sm, sd * (hw + 0.15), -0.1), P(sm, sd * (hw + 0.15), 0.35));
       S('ground', sd).row(b, c, 0, flat(b), flat(c));
     }
   }

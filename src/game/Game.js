@@ -9,6 +9,7 @@ import { buildTrackMesh } from '../render/TrackMesh.js';
 import { loadSurfaceTextures } from '../render/textures.js';
 import { NetClient, roomsUrl, createRoom, roomInfo } from '../net/NetClient.js';
 import { createLobbyScreens, loadProfile } from '../ui/lobby.js';
+import { createMinimap } from '../ui/minimap.js';
 import { normalizeCode } from '../net/room/codes.js';
 import { packCar, unpackCar, FX, isCarArray } from '../net/carState.js';
 import { RemoteTrack, DELAY } from '../net/interp.js';
@@ -88,6 +89,7 @@ export class Game {
       onRecalibrate: () => this.toCalibrate(),
       onSkip: () => { this.skipping = true; },
     });
+    this.minimap = createMinimap(uiRoot, this.track);
     this.sound = new Sound();
     const mute = document.createElement('button');
     mute.id = 'btn-mute'; mute.setAttribute('aria-label', 'השתק');
@@ -108,7 +110,7 @@ export class Game {
     uiRoot.appendChild(flip); uiRoot.appendChild(toast);
     // any first tap unlocks audio (autopilot / skipCalib flows have no "play" button)
     addEventListener('pointerdown', () => this.sound.unlock(), { once: false, capture: true });
-    this.screens = createScreens(uiRoot, this.tilt, { onPlay: () => this.onPlay(), onStart: () => this.onStartRace(), onCreate: () => this.openProfile('create'), onJoin: () => this.openProfile('join') });
+    this.screens = createScreens(uiRoot, this.tilt, { onPlay: () => this.onPlay(), onStart: () => this.onStartRace(), onCreate: () => this.openProfile('create'), onJoin: () => this.openProfile('join'), onRecalibrate: () => this.onRecalibrateTap() });
     this.serverUrl = roomsUrl(params);
     this.net = null; this.roomMsg = null; this.lastResults = null; this.progAcc = 0; this.sendAcc = 0; this.netStats = { itemsIn: 0, ehitIn: 0, boxOk: 0, boxDenied: 0 }; this.remotes = new Map(); this.roomRoster = null;
     this.lobbyUI = createLobbyScreens(uiRoot, {
@@ -202,8 +204,8 @@ export class Game {
 
   setHudVisible(v) { this.uiRoot.classList.toggle('hud-hidden', !v); }
   toMenu() {
-    this.sound.stopMusic(); this.state = 'menu'; this.setHudVisible(false); this.lobbyUI.hide(); this.screens.showMenu(!!this.serverUrl); }
-  toCalibrate() { this.lobbyUI.hide(); this.sound.stopMusic(); this.state = 'calibrate'; this.setHudVisible(false); this.hud.reset(); this.screens.showCalibrate(); }
+    this.sound.stopMusic(); this.state = 'menu'; this.setHudVisible(false); this.lobbyUI.hide(); this.screens.showMenu(!!this.serverUrl, this.tilt.hasSavedDirection); }
+  toCalibrate() { this.tilt.forgetDirection(); this.lobbyUI.hide(); this.sound.stopMusic(); this.state = 'calibrate'; this.setHudVisible(false); this.hud.reset(); this.screens.showCalibrate(); }
 
   /* ---------- playing with friends ---------- */
 
@@ -269,12 +271,16 @@ export class Game {
   onNet(m) {
     switch (m.t) {
       case 'welcome':
-        if (!this.joinedRoom) { this.joinedRoom = true; this.toCalibrate(); this.screens.setStartLabel('אישור'); }   // a reconnect must not restart anything
+        if (!this.joinedRoom) {            // a reconnect must not restart anything
+          this.joinedRoom = true;
+          if (this.tilt.hasSavedDirection && this.tilt.useSavedDirection()) { this.net.send({ t: 'calibrated' }); this.showLobby(); }   // calibrated before: no screen
+          else { this.toCalibrate(); this.screens.setStartLabel('אישור'); }
+        }
         break;
       case 'room':
         this.roomMsg = m; this.lobbyUI.room(m);
         // after a race the lobby asks everyone to calibrate again (the direction is measured before every race)
-        if (m.phase === 'lobby' && this.state === 'lobby' && this.autoCalibFor !== m.raceNo && !m.players.find((p) => p.id === this.net.you)?.calibrated) { this.autoCalibFor = m.raceNo; this.toCalibrate(); this.screens.setStartLabel('אישור'); }
+        if (m.phase === 'lobby' && this.state === 'lobby' && this.autoCalibFor !== m.raceNo && !m.players.find((p) => p.id === this.net.you)?.calibrated) { this.autoCalibFor = m.raceNo; if (this.tilt.hasSavedDirection && this.tilt.useSavedDirection()) this.net.send({ t: 'calibrated' }); else { this.toCalibrate(); this.screens.setStartLabel('אישור'); } }
         break;
       case 'race_start': this.onRaceStartNet(m); break;
       case 'results':
@@ -341,6 +347,18 @@ export class Game {
     })();
     await Promise.all([perm, immersive]);
     this.tilt.start();
+    this.afterSensorsReady();
+  }
+
+  /** Calibrated before on this phone: straight to the race (the centre is set during the 3-2-1). First time: the guided calibration. */
+  afterSensorsReady() {
+    if (this.tilt.hasSavedDirection && this.tilt.useSavedDirection()) { this.screens.hide(); this.beginRace(); }
+    else this.toCalibrate();
+  }
+
+  /** Menu "calibrate again": forget the remembered direction and run the guided protocol. */
+  async onRecalibrateTap() {
+    await this.prepareSensors();
     this.toCalibrate();
   }
 
@@ -417,12 +435,15 @@ export class Game {
     // pressing turbo in the last fraction of the countdown = start boost (no turbo is used up)
     if (pressed && !this.prevTurboCd && this.countT <= CONFIG.countdown.START_BOOST_WINDOW) this.boostArmed = true;
     this.prevTurboCd = pressed;
+    // the centre ("straight") = how the phone is held during the last second before GO (not the very last moment: a turbo tap moves it)
+    if (this.countT <= 1.4 && this.countT > 0.3) { if (!this.tilt.az) this.tilt.beginAutoZero(); this.tilt.sampleAutoZero(); }
     if (this.countT > 0) {
       const n = Math.ceil(this.countT);
       this.hud.showCountdown(String(n));
       if (this.lastBeep !== n) { this.lastBeep = n; this.sound.beep(false); }
       return;
     }
+    this.tilt.finishAutoZero();
     this.sound.beep(true);
     this.world.go(this.boostArmed);
     this.world.player.prevTurboInput = true;   // a still-held button must not also burn a turbo
@@ -768,6 +789,8 @@ export class Game {
     this.particles.update(dt, this.camera, this.renderer.domElement.height);
     this.hud.update({ car: player, cars: w.cars, length: this.track.finishS, roller: w.roller });
     if (this.state === 'spectate') this.hud.updateStandings(w.ranked, this.specId);
+    this.minimap.setVisible(this.state !== 'spectate');     // the standings take that corner while watching
+    this.minimap.update(dt, w.cars, player.id, this.state === 'spectate' ? this.specId : null);
     this.updateRoller(dt, target, player);
     this.env.update(this.camera);
     const t1 = performance.now();

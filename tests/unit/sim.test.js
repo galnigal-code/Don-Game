@@ -81,13 +81,15 @@ describe('Car', () => {
     run(car2, 3); run(car2, 1, -0.5);
     expect(car2.d).toBeLessThan(-2);
   });
-  it('is slowed by sand and can drive on it', () => {
-    const car = createCar({ s: 0, d: 0 });
-    run(car, 3);            // still on the opening straight
+  it('V4: drives on the sand at the SAME speed as on the road (no slowdown off the road)', () => {
+    const car = createCar({ s: 0, d: 0 }), ref = createCar({ s: 0, d: 0 });
+    run(car, 3); run(ref, 3);
     car.d = 11; car.yaw = 0;
-    run(car, 1, 0);
+    run(car, 1, 0); run(ref, 1, 0);
     expect(car.offroad).toBe(true);
-    expect(car.speed).toBeLessThan(C.CRUISE_SPEED * 0.8);
+    expect(car.speed).toBeCloseTo(ref.speed, 6);
+    car.turboT = 2; ref.turboT = 2; run(car, 1, 0); run(ref, 1, 0);
+    expect(car.offroad).toBe(true); expect(car.speed).toBeCloseTo(ref.speed, 6);       // turbo too
   });
   it('is stopped by canyon walls', () => {
     const car = createCar({ s: 1250 });
@@ -96,20 +98,18 @@ describe('Car', () => {
     expect(Math.abs(car.d)).toBeLessThanOrEqual(hw + 1e-6);
     expect(car.state).toBe('driving');
   });
-  it('falls off a cliff and respawns at the last checkpoint', () => {
+  it('V4: cannot fall off a cliff, the guard rail holds the car on the road', () => {
     const car = createCar({ s: 640 });
     run(car, 1);
     let fell = false;
-    for (let i = 0; i < 60 * 6 && car.respawns === 0; i++) {
+    for (let i = 0; i < 60 * 6; i++) {
       car.input.steer = -1; stepCar(car, DT, track);
       if (car.state === 'falling') fell = true;
+      if (track.sample(car.s).edgeLeft === 'cliff') expect(car.d).toBeGreaterThanOrEqual(-(track.sample(car.s).halfWidth - C.HALF_WIDTH) - 0.1);
     }
-    expect(fell).toBe(true);
-    expect(car.respawns).toBe(1);
+    expect(fell).toBe(false);
+    expect(car.respawns).toBe(0);
     expect(car.state).toBe('driving');
-    expect(car.s).toBe(car.lastCheckpointS);
-    expect(car.d).toBe(0);
-    expect(car.lastCheckpointS % CONFIG.track.CHECKPOINT_EVERY).toBe(0);
   });
   it('starts with 2 turbos, spends one per press and does not waste a press while active', () => {
     const car = createCar({ s: 0 });

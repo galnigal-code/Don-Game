@@ -5,7 +5,7 @@ export const CONFIG = {
     CRUISE_SPEED: 32, ACCEL: 14, DECEL: 22, TURBO_ACCEL: 30,
     TURBO_MULT: 1.6, TURBO_TIME: 2.5, TURBO_MAX: 2, TURBO_RECHARGE: 7,
     STEER_RATE: 1.6, MAX_YAW: 0.55, YAW_RETURN: 2.0, DRIFT_K: 0.55, STEER_SMOOTH: 12,
-    SAND_MULT: 0.6, GRAVITY: 22,
+    SAND_MULT: 1, GRAVITY: 22,   // SAND_MULT 1 = V4: leaving the road never slows the car down (user decision)
     HIT_SPEED_MULT: { spin: 0.35, launch: 0.1, slip: 0.7, bump: 0.45, shove: 0.85 },
     HIT_TIME: { spin: 1.5, launch: 1.5, slip: 1.5, bump: 1.0, shove: 0.7 },
     HIT_DECEL: 55, RESPAWN_TIME: 1.5, INVULN_AFTER_RESPAWN: 1.5, STUCK_TIME: 3,

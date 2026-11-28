@@ -137,14 +137,15 @@ describe('walls and cliffs', () => {
     expect(maxD).toBeLessThanOrEqual(hw + 1e-9);
     expect(c.state).toBe('driving');
   });
-  it('a car at the edge of an unfenced cliff that is thrown over it falls (and comes back)', () => {
-    const s = 1950;                                           // the right-hand cliff, on an almost straight bit (no bend drift to fight the throw)
+  it('V4: a car thrown at a cliff is stopped by the guard rail (nobody falls off the track)', () => {
+    const s = 1950;                                           // the right-hand cliff, on an almost straight bit
     expect(track.sample(s).edgeRight).toBe('cliff');
     const hw = track.sample(s).halfWidth;
-    const c = createCar({ s, d: hw - 0.5 }); c.speed = 30; c.vd = K.MAX_VD;     // half a metre from the edge, thrown towards it
-    let fell = false;
-    for (let i = 0; i < 60 * 6 && c.respawns === 0; i++) { c.input.steer = 0; stepCar(c, DT, track); if (c.state === 'falling') fell = true; }
-    expect(fell).toBe(true); expect(c.respawns).toBe(1); expect(c.vd).toBe(0);
+    const c = createCar({ s, d: hw - 1.5 }); c.speed = 30; c.vd = K.MAX_VD;     // thrown towards the drop
+    let fell = false, worst = 0;
+    for (let i = 0; i < 60 * 3; i++) { c.input.steer = 1; stepCar(c, DT, track); if (c.state === 'falling') fell = true; if (track.sample(c.s).edgeRight === 'cliff') worst = Math.max(worst, c.d); }
+    expect(fell).toBe(false); expect(c.respawns).toBe(0);
+    expect(worst).toBeLessThanOrEqual(hw - CONFIG.car.HALF_WIDTH + 0.1);
   });
   it('a thrown car in the middle of the road does NOT fall off a cliff: the throw is at most about 3 m', () => {
     const cliff = SEGMENTS.find((x) => x.type === 'cliff' && x.side === 'left'), s = cliff.from + 40;

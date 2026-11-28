@@ -150,10 +150,9 @@ export function stepCar(car, dt, track) {
   const side = car.d < 0 ? -1 : 1;
   const edge = side < 0 ? sm.edgeLeft : sm.edgeRight;
   const absd = Math.abs(car.d);
-  if (edge === 'cliff') {
-    if (absd > hw && !finished) { startFall(car); return; }
-  } else {
-    const limit = edge === 'wall' ? hw - C.HALF_WIDTH : hw + CONFIG.track.SAND_EXTRA;
+  {
+    // walls and the cliff guard rails stop the car with its SIDE at the barrier; on sand the fence is further out
+    const limit = edge === 'wall' || edge === 'cliff' ? hw - C.HALF_WIDTH : (side < 0 ? sm.sandLimL : sm.sandLimR) ?? hw + CONFIG.track.SAND_EXTRA;
     if (absd > limit) {
       car.d = side * limit;
       if (car.yaw * side > 0) car.yaw = -car.yaw * 0.4;
