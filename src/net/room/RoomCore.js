@@ -114,6 +114,18 @@ export class RoomCore {
       case 'emoji':
         if (now - p.lastEmoji >= ROOM.EMOJI_COOLDOWN_MS) { p.lastEmoji = now; this.send('all', { t: 'emoji', from: playerId, e: m.e }); }
         break;
+      case 'st': {       // a phone reports its own car: relay to everybody else (only for the car that belongs to it)
+        const mine = this.phase === 'racing' && this.roster.find((c) => c.playerId === playerId);
+        if (mine && m.a[0] === mine.carId) this.send({ except: playerId }, { t: 'st', a: m.a });
+        break;
+      }
+      case 'bots': {     // the host reports the bots
+        if (this.phase !== 'racing' || playerId !== this.hostId) break;
+        const botIds = new Set(this.roster.filter((c) => c.kind === 'bot').map((c) => c.carId));
+        const list = m.a.filter((a) => botIds.has(a[0]));
+        if (list.length) this.send({ except: playerId }, { t: 'bots', a: list });
+        break;
+      }
       case 'prog': if (p.inRace && this.phase === 'racing') p.progress = Math.max(p.progress, m.s); break;
       case 'finish':
         if (p.inRace && this.phase === 'racing' && !p.finish) {

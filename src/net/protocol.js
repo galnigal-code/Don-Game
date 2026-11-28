@@ -1,8 +1,9 @@
 // Wire protocol between the game (client) and the room server. JSON messages: { t: <type>, ... }.
 export const PROTOCOL_VERSION = 1;
-export const MAX_MESSAGE_BYTES = 1024;
+export const MAX_MESSAGE_BYTES = 1024;     // the biggest message is `bots` (3 cars, about 200 bytes)
 export const EMOJIS = ['😂', '🔥', '😡', '👋'];
 
+import { isCarArray } from './carState.js';
 const num = (v) => typeof v === 'number' && Number.isFinite(v);
 const str = (v, max) => typeof v === 'string' && v.length <= max;
 
@@ -14,6 +15,8 @@ const CLIENT = {
   start_now: () => true,
   leave: () => true,
   emoji: (m) => EMOJIS.includes(m.e),
+  st: (m) => isCarArray(m.a),
+  bots: (m) => Array.isArray(m.a) && m.a.length >= 1 && m.a.length <= 5 && m.a.every(isCarArray),
   prog: (m) => num(m.s),
   finish: (m) => num(m.raceTime) && m.raceTime >= 0 && m.raceTime < 3600,
 };

@@ -56,6 +56,7 @@ export class RoomHost {
       if (msg.t === 'room' || msg.t === 'results' || msg.t === 'race_start') this.changed = true;
       const text = JSON.stringify(msg);
       if (to === 'all') { for (const [, connId] of this.byPlayer) this.io.send(connId, text); }
+      else if (to && typeof to === 'object') { for (const [pid, connId] of this.byPlayer) if (pid !== to.except) this.io.send(connId, text); }
       else { const connId = this.byPlayer.get(to); if (connId != null) this.io.send(connId, text); }
     }
   }

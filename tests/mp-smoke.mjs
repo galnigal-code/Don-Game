@@ -61,6 +61,12 @@ try {
   const seeds = await Promise.all([A, B, C, D].map((P) => P.page.evaluate(() => window.__game.raceSeed)));
   ok(new Set(seeds).size === 1, `everyone races on the same seed (${seeds[0]})`);
 
+  // the other phones' cars are really driving in my world (not a separate race)
+  for (const P of [A, B, C, D]) await P.page.waitForFunction(() => { const w = window.__game.world; return w.online && w.cars.length === 4 && w.cars.filter((c) => c.owner === 'remote' && c.kind === 'human' && c.s > 150).length === 3; }, null, { timeout: 60000 });
+  ok(true, 'each phone sees the 3 other human cars driving on its own track');
+  const gap = await Promise.all([A, B].map((P) => P.page.evaluate(() => { const w = window.__game.world; return w.cars.map((c) => Math.round(c.s)); })));
+  console.log('     positions seen by A:', gap[0].join(','), ' by B:', gap[1].join(','));
+
   // everyone finishes; the lobby comes back with the same code and a score table
   for (const P of [A, B, C, D]) await P.page.waitForFunction(() => document.querySelector('#scr-lobby:not([hidden])') && document.querySelectorAll('#lobby-last .pl').length > 0, null, { timeout: 170000 });
   ok(true, 'results arrive and everyone is back in the lobby');

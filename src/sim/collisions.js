@@ -23,6 +23,8 @@ export function resolveCarCollisions(cars, ctx = {}) {
     for (let j = i + 1; j < cars.length; j++) {
       const b = cars[j];
       if (b.state !== 'driving') continue;
+      const aR = a.owner === 'remote', bR = b.owner === 'remote';
+      if (aR && bR) continue;                       // two cars of other phones: their owners resolve it
       const ds = b.s - a.s, dd = b.d - a.d;
       const sx = ds / A, sy = dd / B;
       const r = Math.hypot(sx, sy);
@@ -36,8 +38,9 @@ export function resolveCarCollisions(cars, ctx = {}) {
       // 1. positional separation
       const push = (1 - r) / 2;
       const sep = r < 1e-6 ? { s: 0, d: (a.id < b.id ? 1 : -1) * B } : { s: sx / r * A, d: sy / r * B };
-      a.s -= sep.s * push; a.d -= sep.d * push;
-      b.s += sep.s * push; b.d += sep.d * push;
+      // only cars this phone owns are moved (the other phone moves its own car, the formula is symmetric)
+      if (!aR) { a.s -= sep.s * push; a.d -= sep.d * push; }
+      if (!bR) { b.s += sep.s * push; b.d += sep.d * push; }
 
       // 2. impulse (only for a pair that is approaching, and not twice in a row)
       const cd = (a.bumpCd[b.id] || 0) > 0 || (b.bumpCd[a.id] || 0) > 0;
@@ -54,7 +57,8 @@ export function resolveCarCollisions(cars, ctx = {}) {
         car.vd = clamp(car.vd + dvd, -K.MAX_VD, K.MAX_VD);
         car.yaw = clamp(car.yaw + clamp(dvd * K.YAW_GAIN, -K.YAW_MAX, K.YAW_MAX), -CONFIG.car.MAX_YAW, CONFIG.car.MAX_YAW);
       };
-      apply(a, -1, ma); apply(b, +1, mb);
+      if (!aR) apply(a, -1, ma);
+      if (!bR) apply(b, +1, mb);
       a.bumpCd[b.id] = K.PAIR_COOLDOWN; b.bumpCd[a.id] = K.PAIR_COOLDOWN;
 
       // 3. a hard hit: the lighter car (if equal: the one that was driven INTO) slides for a moment
@@ -63,7 +67,7 @@ export function resolveCarCollisions(cars, ctx = {}) {
         let victim;
         if (ma !== mb) victim = ma < mb ? a : b;
         else { const towardB = va.s * nx + va.d * ny, towardA = -(vb.s * nx + vb.d * ny); victim = towardB >= towardA ? b : a; }
-        applyHit(victim, 'shove', world);
+        if (victim.owner !== 'remote') applyHit(victim, 'shove', world);
       }
       if (strength >= K.EVENT_MIN) {
         world.stats.bumps = (world.stats.bumps || 0) + 1;

@@ -14,6 +14,7 @@ import { stepEntities } from './entities.js';
 import { BOT_NAMES, BOT_COLORS } from './botNames.js';
 export { BOT_NAMES, BOT_COLORS };
 const GRID = [[-6, -3], [-6, 3], [-12, -3], [-12, 3]];
+export const GRID6 = [...GRID, [-18, -3], [-18, 3]];
 
 function shuffle(arr, rng) {
   for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; }
@@ -21,20 +22,39 @@ function shuffle(arr, rng) {
 }
 
 /** roller: the giant roller is shelved (CONFIG.roller.ENABLED = false); pass true to run it (its own tests do). */
-export function createWorld({ track, seed = 1, bots = 3, roller = CONFIG.roller.ENABLED } = {}) {
+/**
+ * roster (online races): [{ carId, kind: 'human'|'bot', name, color, slot }] - cars are built in carId order (car.id === index).
+ * myCarId: the car this phone drives. hostsBots: this phone runs the bots (the room host). Every other car is `owner: 'remote'`:
+ * the simulation does not step it, the game feeds it from the network.
+ */
+export function createWorld({ track, seed = 1, bots = 3, roller = CONFIG.roller.ENABLED, roster = null, myCarId = 0, hostsBots = true } = {}) {
   const rng = createRng(seed);
   const slots = shuffle(GRID.slice(), rng);
   const names = shuffle(BOT_NAMES.slice(), rng);
 
   const shuffledLanes = shuffle([0, 1, 2], rng);
   const cars = [];
-  const player = createCar({ id: 0, name: 'אתה', color: 0xd0201c, isPlayer: true, s: slots[0][0], d: slots[0][1] });
-  cars.push(player);
   const brains = new Map();
-  for (let i = 0; i < bots; i++) {
-    const car = createCar({ id: i + 1, name: names[i], color: BOT_COLORS[i % BOT_COLORS.length], s: slots[i + 1][0], d: slots[i + 1][1] });
-    cars.push(car);
-    brains.set(car, createBrain(rng, track, shuffledLanes[i]));
+  let player;
+  if (roster) {
+    for (const r of [...roster].sort((a, b) => a.carId - b.carId)) {
+      const [gs, gd] = GRID6[r.slot];
+      const car = createCar({ id: r.carId, name: r.name, color: r.color, isPlayer: r.carId === myCarId, s: gs, d: gd });
+      car.kind = r.kind; car.owner = (r.carId === myCarId || (r.kind === 'bot' && hostsBots)) ? 'local' : 'remote';
+      cars.push(car);
+      if (r.carId === myCarId) player = car;
+      else if (r.kind === 'bot' && hostsBots) brains.set(car, createBrain(createRng(seed * 31 + r.carId), track, r.carId % 3));
+    }
+  } else {
+    player = createCar({ id: 0, name: 'אתה', color: 0xd0201c, isPlayer: true, s: slots[0][0], d: slots[0][1] });
+    player.kind = 'human'; player.owner = 'local';
+    cars.push(player);
+    for (let i = 0; i < bots; i++) {
+      const car = createCar({ id: i + 1, name: names[i], color: BOT_COLORS[i % BOT_COLORS.length], s: slots[i + 1][0], d: slots[i + 1][1] });
+      car.kind = 'bot'; car.owner = 'local';
+      cars.push(car);
+      brains.set(car, createBrain(rng, track, shuffledLanes[i]));
+    }
   }
 
   const fixed = FIXED_OBSTACLES.map((o, i) => ({ id: i + 1, type: o.kind, s: o.s, d: o.d, ownerId: -1, age: 0, alive: true, travel: 0, fixed: true }));
@@ -44,6 +64,18 @@ export function createWorld({ track, seed = 1, bots = 3, roller = CONFIG.roller.
     events: [], entityId: fixed.length, stats: { pickups: 0, uses: 0, hits: 0, bumps: 0 },
     roller: Object.assign(createRoller(), roller ? {} : { ended: true }), eliminated: [],
     finishOrder: [], leaderS: 0, sincePlayerOut: 0, ranked: computeRanks(cars),
+
+    online: !!roster,
+    /** The room host changed to this phone: take over the bots (they keep their last position). */
+    adoptBots() {
+      for (const car of cars) {
+        if (car.kind !== 'bot' || car.owner === 'local') continue;
+        car.owner = 'local'; car.input = { steer: 0, turbo: false, item: false };
+        brains.set(car, createBrain(createRng(seed * 31 + car.id + 7), track, car.id % 3));
+      }
+    },
+    /** Hand the bots over (this phone is no longer the host): they become remote again. */
+    releaseBots() { for (const [car] of [...brains]) { car.owner = 'remote'; brains.delete(car); } },
 
     /** Race start: the player may get the start boost; some bots always may. */
     go(playerBoost = false) {
@@ -63,9 +95,12 @@ export function createWorld({ track, seed = 1, bots = 3, roller = CONFIG.roller.
         // rubber band (friendly to the player): a bot that leads eases off strongly, one that trails
         // pushes only a little. Off once the player is done.
         let rb = 1;
-        const playerOut = player.state === 'finished' || player.state === 'eliminated';
+        // the rubber band compares a bot with the nearest HUMAN (online: the pack of friends; never applied to humans)
+        let ref = player;
+        if (world.online) { ref = null; for (const c of cars) if (c.kind === 'human' && c.state !== 'finished' && (!ref || Math.abs(c.s - car.s) < Math.abs(ref.s - car.s))) ref = c; }
+        const playerOut = !ref || ref.state === 'finished' || ref.state === 'eliminated';
         if (!playerOut) {
-          const x = Math.max(-1, Math.min(1, (car.s - player.s) / CONFIG.bots.RUBBER_RANGE)); // + = bot ahead
+          const x = Math.max(-1, Math.min(1, (car.s - ref.s) / CONFIG.bots.RUBBER_RANGE)); // + = bot ahead
           rb = x > 0 ? 1 - x * CONFIG.bots.RUBBER_SLOW_MAX : 1 - x * CONFIG.bots.RUBBER_BOOST_MAX;
           // never slow a bot down when the roller is right behind it
           if (world.roller.active && car.s - world.roller.s < CONFIG.roller.NO_SLOWDOWN_DIST) rb = Math.max(rb, 1);
@@ -73,12 +108,14 @@ export function createWorld({ track, seed = 1, bots = 3, roller = CONFIG.roller.
         car.input.speedMult = brain.skill * rb;
       }
       for (const car of cars) {
+        if (car.owner === 'remote') continue;
         const want = !!car.input.item;
         if (want && !car.prevItemInput) useItem(car, world);
         car.prevItemInput = want;
         stepGun(car, world, dt);
       }
       for (const car of cars) {
+        if (car.owner === 'remote') continue;
         stepCar(car, dt, track);
         if (car.state === 'finished' && car.finishTime == null) {
           car.finishTime = world.time;
@@ -86,7 +123,7 @@ export function createWorld({ track, seed = 1, bots = 3, roller = CONFIG.roller.
           car.place = world.finishOrder.length;
         }
       }
-      for (const car of cars) if (car.justRespawned) { car.justRespawned = false; placeAheadOfRoller(world, car); }
+      for (const car of cars) if (car.owner !== 'remote' && car.justRespawned) { car.justRespawned = false; placeAheadOfRoller(world, car); }
       stepRoller(world, dt);
       stepEntities(world, dt);
       stepBoxes(world, dt);
@@ -94,7 +131,7 @@ export function createWorld({ track, seed = 1, bots = 3, roller = CONFIG.roller.
       world.ranked = computeRanks(cars);
 
       // safety net: nobody should be stuck for long after the player is done (finished or flattened)
-      if (player.state === 'finished' || player.state === 'eliminated') {
+      if (!world.online && (player.state === 'finished' || player.state === 'eliminated')) {
         world.sincePlayerOut += dt;
         if (world.sincePlayerOut > CONFIG.race.FORCE_FINISH_AFTER) {
           for (const car of world.ranked) if (car.finishTime == null && car.state !== 'eliminated') {

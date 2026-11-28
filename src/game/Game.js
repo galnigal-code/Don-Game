@@ -10,6 +10,8 @@ import { loadSurfaceTextures } from '../render/textures.js';
 import { NetClient, roomsUrl, createRoom, roomInfo } from '../net/NetClient.js';
 import { createLobbyScreens, loadProfile } from '../ui/lobby.js';
 import { normalizeCode } from '../net/room/codes.js';
+import { packCar, unpackCar, FX, isCarArray } from '../net/carState.js';
+import { RemoteTrack, DELAY } from '../net/interp.js';
 import { createCarModel } from '../render/CarModel.js';
 import { CarSuspension, wheelSteerAngle } from '../render/suspension.js';
 import { CameraRig } from '../render/CameraRig.js';
@@ -99,7 +101,7 @@ export class Game {
     addEventListener('pointerdown', () => this.sound.unlock(), { once: false, capture: true });
     this.screens = createScreens(uiRoot, this.tilt, { onPlay: () => this.onPlay(), onStart: () => this.onStartRace(), onCreate: () => this.openProfile('create'), onJoin: () => this.openProfile('join') });
     this.serverUrl = roomsUrl(params);
-    this.net = null; this.roomMsg = null; this.lastResults = null; this.progAcc = 0;
+    this.net = null; this.roomMsg = null; this.lastResults = null; this.progAcc = 0; this.sendAcc = 0; this.remotes = new Map(); this.roomRoster = null;
     this.lobbyUI = createLobbyScreens(uiRoot, {
       onBack: () => this.toMenu(), onProfileDone: (mode, profile, code) => this.profileDone(mode, profile, code),
       onStartNow: () => this.net?.send({ t: 'start_now' }), onCalibrate: () => this.toCalibrate(),
@@ -268,7 +270,14 @@ export class Game {
         this.lastResults = m; this.hud.hideResult(); this.hud.reset(); this.sound.stopMusic();
         this.showLobby(); this.screens.setStartLabel('אישור');
         break;
-      case 'host': if (m.id === this.net.you) this.showToast('אתה המארח עכשיו 👑'); break;
+      case 'st': if (isCarArray(m.a)) this.remotes.get(m.a[0])?.push(unpackCar(m.a)); break;
+      case 'bots': for (const a of m.a || []) if (isCarArray(a)) this.remotes.get(a[0])?.push(unpackCar(a)); break;
+      case 'host':
+        if (m.id === this.net.you) {
+          this.showToast('אתה המארח עכשיו 👑');
+          if (this.world?.online && !this.hostsBots) { this.hostsBots = true; this.world.adoptBots(); }   // the bots run on this phone from now on
+        }
+        break;
       default: break;
     }
   }
@@ -277,6 +286,8 @@ export class Game {
     if (m.spectator) { if (this.state === 'lobby') this.showToast('מרוץ מתנהל, תיכנס למרוץ הבא', 3000); return; }
     this.lobbyUI.hide();
     this.raceSeed = m.seed; this.raceStartNet = m;
+    this.roomRoster = m.roster; this.hostsBots = m.hostId === this.net.you;
+    this.myCarId = m.roster.find((c) => c.playerId === this.net.you)?.carId ?? 0;
     this.beginRace();
     this.countT = Math.max(0.3, (m.goAt - this.net.serverNow()) / 1000);
     this.progAcc = 0;
@@ -304,9 +315,11 @@ export class Game {
   newRace() {
     for (const v of this.views) { this.scene.remove(v.root); this.scene.remove(v.blob); }
     const seed = this.net && this.raceSeed ? this.raceSeed : (this.fixedSeed ?? ((Math.random() * 1e9) | 0));
-    this.world = createWorld({ track: this.track, seed, roller: this.params.has('roller') ? this.params.get('roller') === '1' : CONFIG.roller.ENABLED });   // shelved: ?roller=1 brings it back (tests)
+    const online = !!(this.net && this.roomRoster);
+    this.world = createWorld({ track: this.track, seed, ...(online ? { roster: this.roomRoster, myCarId: this.myCarId, hostsBots: this.hostsBots } : {}), roller: this.params.has('roller') ? this.params.get('roller') === '1' : CONFIG.roller.ENABLED });   // shelved: ?roller=1 brings it back (tests)
     this.autoBrain = createBrain(createRng(seed + 1000), this.track);   // used by ?autopilot=1
-    if (this.net && this.profile) { this.world.player.color = this.profile.color; this.world.player.name = this.profile.name; }
+    this.remotes = new Map();
+    if (online) { for (const c of this.world.cars) if (c.owner === 'remote') this.remotes.set(c.id, new RemoteTrack()); }
     this.entityViews.setWorld(this.world);
     this.views = this.world.cars.map((car) => {
       const v = createCarModel(car.color, car.isPlayer ? null : car.name);
@@ -346,6 +359,7 @@ export class Game {
     this.last = now;
     if (!this.paused) {
       if (this.state === 'countdown') this.updateCountdown(dt);
+      if (this.net && this.world.online && (this.state === 'racing' || this.state === 'spectate')) this.sendNetState(dt);
       if (this.net && this.state === 'racing') { this.progAcc += dt; if (this.progAcc >= 1) { this.progAcc = 0; this.net.send({ t: 'prog', s: this.world.player.s }); } }
       if (this.state === 'racing' || this.state === 'spectate') { const ts = performance.now(); this.runSim(dt); this.simMs += (performance.now() - ts - this.simMs) * 0.05; }
       if (this.goTextT > 0) { this.goTextT -= dt; if (this.goTextT <= 0) this.hud.hideCountdown(); }
@@ -390,11 +404,40 @@ export class Game {
     }
     const w = this.world, p = w.player;
     if (this.state === 'racing' && (p.state === 'finished' || p.state === 'eliminated')) this.enterSpectate();
-    if ((this.state === 'spectate' || this.state === 'racing') && w.done) this.enterResults();
+    if (!this.net && (this.state === 'spectate' || this.state === 'racing') && w.done) this.enterResults();   // online: the server sends the results
+  }
+
+  /** Online: put every other phone's car where it should be shown now (a little in the past, interpolated). */
+  applyRemotes(w) {
+    const t = w.time - DELAY;
+    for (const car of w.cars) {
+      if (car.owner !== 'remote') continue;
+      car.t += STEP;
+      const sm = this.remotes.get(car.id)?.sample(t);
+      if (!sm) continue;
+      car.s = sm.s; car.d = sm.d; car.h = sm.h; car.yaw = sm.yaw; car.speed = sm.speed; car.steer = sm.steer; car.state = sm.state;
+      car.hit.kind = sm.hitKind; car.hit.t = sm.hitT; car.vd = 0; car.vy = 0;
+      car.turboT = sm.fx & FX.turbo ? 1 : 0; car.shieldT = sm.fx & FX.shield ? 1 : 0; car.invulnT = sm.fx & FX.invuln ? 1 : 0;
+      if (sm.state === 'finished' && car.finishTime == null) { car.finishTime = sm.t; w.finishOrder.push(car); car.place = w.finishOrder.length; }
+    }
+  }
+
+  /** Online: send my car (and the bots, when this phone is the host) about 15 times a second. */
+  sendNetState(dt) {
+    this.sendAcc += dt;
+    if (this.sendAcc < 1 / 15) return;
+    this.sendAcc = 0;
+    const w = this.world;
+    this.net.send({ t: 'st', a: packCar(w.player, w.time) });
+    if (this.hostsBots) {
+      const list = w.cars.filter((c) => c.kind === 'bot' && c.owner === 'local').map((c) => packCar(c, w.time));
+      if (list.length) this.net.send({ t: 'bots', a: list });
+    }
   }
 
   simStep() {
     const w = this.world, car = w.player;
+    if (w.online) this.applyRemotes(w);
     if (car.state !== 'finished' && car.state !== 'eliminated') {
       if (this.autopilot || this.autoDrive) drivePlayerProxy(car, this.autoBrain, w);
       else {
