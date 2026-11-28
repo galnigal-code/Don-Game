@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { createRng } from '../sim/rng.js';
 import { applySurface } from './textures.js';
+import { createCrowd } from './Crowd.js';
 
 // The city at sunset: facades with real window grids, shops on the ground floor, roof props, a dark ground and a low sun.
 // Everything is merged into a handful of meshes (one per material), so a whole city costs ~8 draw calls.
@@ -115,15 +116,17 @@ export function buildCityEnvironment(track, scene) {
   [[fRes, mats[0]], [fBrick, mats[1]], [fGlass, mats[2]], [shopG, shopM], [roofG, roofM], [propG, propM], [tankG, tankM]].forEach(([G, m]) => { const mesh = toMesh(G, m); if (mesh) buildings.add(mesh); });
   group.add(buildings);
 
+  const crowd = createCrowd(track); group.add(crowd.group);
   const sunDir = new THREE.Vector3(-0.75, 0.1, -0.65).normalize();
   const sun = sunSprite(); group.add(sun);
   scene.add(group);
 
   return {
     group, terrain: null, sunDir, buildings: count,
-    update(camera) { sun.position.copy(camera.position).addScaledVector(sunDir, 1500); },
-    setDetail() { /* the whole city is a few merged meshes: nothing to thin out */ },
+    update(camera, t = 0) { sun.position.copy(camera.position).addScaledVector(sunDir, 1500); crowd.update(camera, t); },
+    setDetail(f) { crowd.setDetail(f * 1); },           // the city itself is a few merged meshes; the crowd thins out with the quality level
+    crowd,
     applySurfaces() { /* the city keeps its own colours */ },
-    stats: { buildings: count },
+    stats: { buildings: count, crowd: crowd.count },
   };
 }

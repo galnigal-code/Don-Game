@@ -170,7 +170,7 @@ export function buildBranchMeshes(track, group, roadMat) {
     const shutter = new THREE.MeshLambertMaterial({ map: canvasTex(64, 64, (g) => { g.fillStyle = '#7d7682'; g.fillRect(0, 0, 64, 64); g.fillStyle = '#5f5866'; for (let y = 0; y < 64; y += 6) g.fillRect(0, y, 64, 2); }), side: THREE.DoubleSide });
     for (const sv of [B.door[1] + 14, B.door[1] + 36, B.door[1] + 58, B.door[1] + 80]) wallAlong(B.dIn + 0.15, B.doorH, 0, sv, sv + 9, shutter, [4.5, 4.5]);          // closed decoy doors
     wallAlong(B.dIn + 0.15, 0.5, 0, d0, d1, shutter, [4.5, 4.5]);                                                                                                     // the real one is rolled up: only its bottom edge shows
-    wallAlong(B.dIn + 0.25, 0.14, B.doorH + 0.15, d0, d1, glow);                                                                                                     // the tell: a thin cyan line above it
+    wallAlong(B.dIn + 0.25, 0.07, B.doorH + 0.15, d0, d1, new THREE.MeshBasicMaterial({ color: 0x1f7f8c, side: THREE.DoubleSide }));                                                                                                  // the tell: a thin, dim teal line above it (subtle on purpose)
     // end walls, with the exit opening in the far one
     const endWall = (sv, hole) => {
       const seg = (l0, l1, y0, y1) => { const P0 = at(sv, l0), P1 = at(sv, l1), g = new THREE.BufferGeometry();

@@ -826,7 +826,7 @@ export class Game {
     this.minimap.setVisible(this.state !== 'spectate');     // the standings take that corner while watching
     this.minimap.update(dt, w.cars, player.id, this.state === 'spectate' ? this.specId : null);
     this.updateRoller(dt, target, player);
-    this.env.update(this.camera);
+    this.env.update(this.camera, performance.now() / 1000);
     const t1 = performance.now();
     this.renderer.render(this.scene, this.camera);
     const t2 = performance.now();
