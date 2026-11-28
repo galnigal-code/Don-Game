@@ -66,6 +66,28 @@ export function createWorld({ track, seed = 1, bots = 3, roller = CONFIG.roller.
     finishOrder: [], leaderS: 0, sincePlayerOut: 0, ranked: computeRanks(cars),
 
     online: !!roster,
+    netOut: [],                                   // things this phone must announce to the room (items used, entities hit); the game drains it
+    /** A box was taken (confirmed by the room): hide it for everybody. */
+    takeBox(boxId, seconds = CONFIG.items.BOX_RESPAWN) { const b = world.boxes[boxId]; if (b) b.t = Math.max(b.t, seconds); },
+    /** An item another phone used: create the same entity here, advanced by the time it spent on the wire. */
+    spawnRemoteItem(m, raceTime) {
+      const owner = cars.find((c) => c.id === m.c);
+      if (!owner || owner.owner !== 'remote' || world.entities.some((e) => e.id === m.id)) return false;
+      const age = Math.max(0, Math.min(1, raceTime - (m.rt ?? raceTime)));
+      const e = { id: m.id, type: m.k, ownerId: m.c, age, alive: true, travel: 0, s: m.s, d: m.d };
+      if (m.k === 'missile') { e.targetId = m.tg >= 0 ? m.tg : null; e.s += CONFIG.items.MISSILE_SPEED * age; e.travel = CONFIG.items.MISSILE_SPEED * age; }
+      world.entities.push(e);
+      return true;
+    },
+    /** Another phone says this entity hit one of its cars: remove it here too. */
+    killEntity(id) {
+      const e = world.entities.find((x) => x.id === id);
+      if (!e || !e.alive) return false;
+      e.alive = false; world.events.push({ type: 'explosion', s: e.s, d: e.d, kind: e.type });
+      return true;
+    },
+    /** Another phone's gun burst: this remote car shoots here as well. */
+    remoteGun(carId) { const c = cars.find((x) => x.id === carId); if (c && c.owner === 'remote') { c.gunShotsLeft = CONFIG.items.GUN_SHOTS; c.gunCooldown = 0; } },
     /** The room host changed to this phone: take over the bots (they keep their last position). */
     adoptBots() {
       for (const car of cars) {
@@ -112,8 +134,8 @@ export function createWorld({ track, seed = 1, bots = 3, roller = CONFIG.roller.
         const want = !!car.input.item;
         if (want && !car.prevItemInput) useItem(car, world);
         car.prevItemInput = want;
-        stepGun(car, world, dt);
       }
+      for (const car of cars) stepGun(car, world, dt);        // other phones' guns fire here too (their burst is announced, the bullets are simulated everywhere)
       for (const car of cars) {
         if (car.owner === 'remote') continue;
         stepCar(car, dt, track);

@@ -67,6 +67,13 @@ try {
   const gap = await Promise.all([A, B].map((P) => P.page.evaluate(() => { const w = window.__game.world; return w.cars.map((c) => Math.round(c.s)); })));
   console.log('     positions seen by A:', gap[0].join(','), ' by B:', gap[1].join(','));
 
+  // items and boxes are shared through the room
+  await new Promise((r) => setTimeout(r, 15000));
+  const st = await Promise.all([A, B, C, D].map((P) => P.page.evaluate(() => window.__game.netStats)));
+  console.log('     net stats:', JSON.stringify(st));
+  ok(st.every((x) => x.boxOk > 0), 'every phone saw confirmed box pickups from the room');
+  ok(st.some((x) => x.itemsIn > 0), 'items used by other phones appear on this phone');
+
   // everyone finishes; the lobby comes back with the same code and a score table
   for (const P of [A, B, C, D]) await P.page.waitForFunction(() => document.querySelector('#scr-lobby:not([hidden])') && document.querySelectorAll('#lobby-last .pl').length > 0, null, { timeout: 170000 });
   ok(true, 'results arrive and everyone is back in the lobby');
@@ -87,6 +94,34 @@ try {
   await G.page.fill('#in-name', 'שביעי'); await G.page.click('#btn-profile-go');
   await G.page.waitForFunction(() => /מלא/.test(document.querySelector('#profile-err')?.textContent || ''), null, { timeout: 8000 });
   ok(true, 'the 7th player is told the room is full');
+
+  // host leaves in the middle of a race: another phone takes over the bots
+  for (const P of pages) await P.page.context().close().catch(() => {});   // free the machine: software rendering of 8 pages is heavy
+  {
+    const H = await newPlayer('H', `${base}?${q}`);
+    await H.page.waitForSelector('#btn-create', { state: 'visible', timeout: 15000 }); await H.page.click('#btn-create');
+    await H.page.fill('#in-name', 'מארח'); await H.page.click('#btn-profile-go');
+    await H.page.waitForSelector('#btn-start:not([disabled])', { timeout: 15000 }); await H.page.click('#btn-start');
+    await H.page.waitForSelector('#scr-lobby:not([hidden])'); const code2 = (await H.page.textContent('#lobby-code')).trim();
+    const J = await newPlayer('J', `${base}?${q}&room=${code2}`);
+    await J.page.waitForSelector('#in-name', { state: 'visible', timeout: 15000 }); await J.page.fill('#in-name', 'אורח'); await J.page.click('#btn-profile-go');
+    await J.page.waitForSelector('#btn-start:not([disabled])', { timeout: 15000 }); await J.page.click('#btn-start');
+    await J.page.waitForSelector('#scr-lobby:not([hidden])');
+    await H.page.waitForSelector('#btn-lobby-start', { state: 'visible', timeout: 8000 }); await H.page.click('#btn-lobby-start');
+    await J.page.waitForFunction(() => window.__game.world?.online && window.__game.state === 'racing', null, { timeout: 20000 });
+    ok(await J.page.evaluate(() => window.__game.world.cars.length === 4 && window.__game.world.cars.filter((c) => c.kind === 'bot').length === 2), '2 humans + 2 bots complete the field to 4');
+    await J.page.waitForFunction(() => window.__game.world.cars.filter((c) => c.kind === 'bot').every((c) => c.s > 80), null, { timeout: 40000 });
+    ok(true, 'the guest sees the host’s bots driving');
+    await H.page.context().close();                     // the host disappears
+    await J.page.waitForFunction(() => window.__game.hostsBots === true, null, { timeout: 15000 });
+    ok(true, 'the other player became the host');
+    const before = await J.page.evaluate(() => window.__game.world.cars.filter((c) => c.kind === 'bot').map((c) => c.s));
+    await new Promise((r) => setTimeout(r, 4000));
+    const after = await J.page.evaluate(() => window.__game.world.cars.filter((c) => c.kind === 'bot' && c.owner === 'local').map((c) => c.s));
+    ok(after.length === 2 && after.every((v, i) => v > before[i] + 20), 'the bots keep driving on the new host phone');
+    await J.page.waitForFunction(() => document.querySelectorAll('#lobby-last .pl').length > 0, null, { timeout: 120000 });
+    ok(true, 'the race still ends with results after the host left');
+  }
 
   for (const P of pages) ok(P.errs.length === 0, `${P.name}: no console errors ${P.errs.slice(0, 2).join(' | ')}`);
 } catch (e) {

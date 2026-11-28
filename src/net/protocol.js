@@ -17,6 +17,9 @@ const CLIENT = {
   emoji: (m) => EMOJIS.includes(m.e),
   st: (m) => isCarArray(m.a),
   bots: (m) => Array.isArray(m.a) && m.a.length >= 1 && m.a.length <= 5 && m.a.every(isCarArray),
+  item: (m) => ['mine', 'oil', 'barrel', 'missile', 'gun'].includes(m.k) && Number.isInteger(m.c) && (m.k === 'gun' || (str(m.id, 16) && num(m.s) && num(m.d) && Number.isInteger(m.tg))) && (m.rt === undefined || num(m.rt)),
+  ehit: (m) => str(m.e, 16) && m.e.length > 0,
+  box_take: (m) => Number.isInteger(m.b) && Number.isInteger(m.c),
   prog: (m) => num(m.s),
   finish: (m) => num(m.raceTime) && m.raceTime >= 0 && m.raceTime < 3600,
 };

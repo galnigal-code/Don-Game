@@ -101,7 +101,7 @@ export class Game {
     addEventListener('pointerdown', () => this.sound.unlock(), { once: false, capture: true });
     this.screens = createScreens(uiRoot, this.tilt, { onPlay: () => this.onPlay(), onStart: () => this.onStartRace(), onCreate: () => this.openProfile('create'), onJoin: () => this.openProfile('join') });
     this.serverUrl = roomsUrl(params);
-    this.net = null; this.roomMsg = null; this.lastResults = null; this.progAcc = 0; this.sendAcc = 0; this.remotes = new Map(); this.roomRoster = null;
+    this.net = null; this.roomMsg = null; this.lastResults = null; this.progAcc = 0; this.sendAcc = 0; this.netStats = { itemsIn: 0, ehitIn: 0, boxOk: 0, boxDenied: 0 }; this.remotes = new Map(); this.roomRoster = null;
     this.lobbyUI = createLobbyScreens(uiRoot, {
       onBack: () => this.toMenu(), onProfileDone: (mode, profile, code) => this.profileDone(mode, profile, code),
       onStartNow: () => this.net?.send({ t: 'start_now' }), onCalibrate: () => this.toCalibrate(),
@@ -270,6 +270,14 @@ export class Game {
         this.lastResults = m; this.hud.hideResult(); this.hud.reset(); this.sound.stopMusic();
         this.showLobby(); this.screens.setStartLabel('אישור');
         break;
+      case 'item': if (this.world?.online) { if (m.k === 'gun') { this.world.remoteGun(m.c); this.netStats.itemsIn++; } else if (this.world.spawnRemoteItem(m, this.world.time)) this.netStats.itemsIn++; } break;
+      case 'ehit': if (this.world?.online && this.world.killEntity(m.e)) this.netStats.ehitIn++; break;
+      case 'box': {
+        const w = this.world; if (!w?.online) break;
+        if (m.ok) { w.takeBox(m.b); this.netStats.boxOk++; }
+        else { const c = w.cars.find((x) => x.id === m.c); if (c && c.owner === 'local') { c.item = null; c.rouletteT = 0; this.netStats.boxDenied++; this.showToast('מישהו הקדים אותך לקופסה', 1500); } }
+        break;
+      }
       case 'st': if (isCarArray(m.a)) this.remotes.get(m.a[0])?.push(unpackCar(m.a)); break;
       case 'bots': for (const a of m.a || []) if (isCarArray(a)) this.remotes.get(a[0])?.push(unpackCar(a)); break;
       case 'host':
@@ -435,6 +443,12 @@ export class Game {
     }
   }
 
+  /** Online: announce what this phone's cars did (items used, entities that hit one of them). */
+  flushNetOut(w) {
+    for (const o of w.netOut) this.net.send(o.k === 'ehit' ? { t: 'ehit', e: o.e } : { ...o, t: 'item', rt: w.time });
+    w.netOut.length = 0;
+  }
+
   simStep() {
     const w = this.world, car = w.player;
     if (w.online) this.applyRemotes(w);
@@ -449,6 +463,7 @@ export class Game {
       }
     }
     w.step(STEP);
+    if (w.online && w.netOut.length) this.flushNetOut(w);
   }
 
   enterSpectate() {
@@ -624,6 +639,8 @@ export class Game {
         const b = this.world.boxes[e.boxId];
         T.toWorld(b.s, b.d, 1.3, tmp); this.effects.sparkle(tmp.x, tmp.y, tmp.z);
         if (e.carId === p.id) { this.sound.pickup(); this.sound.roulette(); this.readyAt = performance.now() + 800; }
+        // online: ask the room for the box (first come, first served); if somebody else was faster the item is taken back
+        if (this.net && this.world.online && this.world.cars.find((x) => x.id === e.carId)?.owner === 'local') this.net.send({ t: 'box_take', b: e.boxId, c: e.carId });
       }
     }
     evs.length = 0;

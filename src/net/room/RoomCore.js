@@ -11,7 +11,7 @@ export const ROOM = {
   MAX_PLAYERS: 6, MIN_FOR_TIMER: 4, TARGET_CARS: 4,
   LOBBY_TIMER_MS: 30000, RECONNECT_MS: 30000, EMPTY_CLOSE_MS: 600000,
   FIRST_FINISH_GRACE_MS: 25000, RACE_MAX_MS: 150000, RESULTS_MS: 8000, GO_DELAY_MS: 4000, CALIB_RETRY_MS: 10000,
-  EMOJI_COOLDOWN_MS: 2500,
+  EMOJI_COOLDOWN_MS: 2500, BOX_LOCK_MS: 2800,
 };
 export const PLAYER_COLORS = [0xd0201c, 0xf5c400, 0x1e6fff, 0x18b04a, 0xff7a00, 0x9b3dff, 0x00b7c2, 0xff4fa3];
 
@@ -25,6 +25,7 @@ export class RoomCore {
     this.emptySince = now; this.closed = false;
     this.players = new Map();             // playerId -> player
     this.roster = [];                     // cars of the current race
+    this.boxLock = new Map();             // boxId -> time until which it is taken (not persisted: a race lasts minutes)
     this.scores = new Map();              // token -> { name, color, points, wins, races }
     this.outbox = [];
   }
@@ -97,6 +98,13 @@ export class RoomCore {
   }
   checkEmpty(now) { if (this.connected().length === 0 && this.emptySince == null) this.emptySince = now; }
 
+  /** Does this player run that car? A human drives their own; the host runs the bots. */
+  ownsCar(playerId, carId) {
+    if (this.phase !== 'racing') return false;
+    const c = this.roster.find((x) => x.carId === carId);
+    return !!c && (c.kind === 'human' ? c.playerId === playerId : playerId === this.hostId);
+  }
+
   /* ---------- messages from a joined player ---------- */
   onMessage(playerId, m, now) {
     const p = this.players.get(playerId);
@@ -124,6 +132,18 @@ export class RoomCore {
         const botIds = new Set(this.roster.filter((c) => c.kind === 'bot').map((c) => c.carId));
         const list = m.a.filter((a) => botIds.has(a[0]));
         if (list.length) this.send({ except: playerId }, { t: 'bots', a: list });
+        break;
+      }
+      case 'item': {      // an item used by a car this phone owns (a human's own car, or a bot when it is the host): relay it
+        if (this.ownsCar(playerId, m.c)) this.send({ except: playerId }, { t: 'item', ...m });
+        break;
+      }
+      case 'ehit': if (this.phase === 'racing') this.send({ except: playerId }, { t: 'ehit', e: m.e }); break;
+      case 'box_take': {  // first come, first served: the room decides who got the box
+        if (this.phase !== 'racing' || !this.ownsCar(playerId, m.c)) break;
+        if (now < (this.boxLock.get(m.b) || 0)) { this.send(playerId, { t: 'box', b: m.b, c: m.c, ok: false }); break; }
+        this.boxLock.set(m.b, now + ROOM.BOX_LOCK_MS);
+        this.send('all', { t: 'box', b: m.b, c: m.c, ok: true });
         break;
       }
       case 'prog': if (p.inRace && this.phase === 'racing') p.progress = Math.max(p.progress, m.s); break;
@@ -198,7 +218,7 @@ export class RoomCore {
       this.roster.push({ carId: i, kind: 'bot', name: names[b], color: colors[b % colors.length], slot: slots[i] });
     }
     for (const p of this.players.values()) { p.inRace = humans.includes(p); p.finish = null; p.progress = 0; }
-    this.phase = 'racing'; this.timerEnd = null; this.firstFinishAt = null;
+    this.phase = 'racing'; this.timerEnd = null; this.firstFinishAt = null; this.boxLock = new Map();
     this.goAt = now + ROOM.GO_DELAY_MS;
     for (const p of this.players.values()) this.send(p.id, p.inRace ? this.raceStartMsg() : { ...this.raceStartMsg(), spectator: true });
     this.pushRoom();

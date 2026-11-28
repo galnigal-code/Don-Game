@@ -34,7 +34,7 @@ export function stepEntities(world, dt) {
     const A = CONFIG.race.COLLIDE_A + reach, B = CONFIG.race.COLLIDE_B + reach;
     for (const car of cars) {
       if (car.id === e.ownerId && (e.type === 'missile' || e.type === 'bullet' || e.age < I.OWN_DROP_IMMUNITY)) continue;
-      if (car.state !== 'driving') continue;
+      if (car.state !== 'driving' || car.owner === 'remote') continue;    // online: each phone only hits ITS cars
       const ds = (e.s - car.s) / A, dd = (e.d - car.d) / B;
       if (ds * ds + dd * dd >= 1) continue;
 
@@ -50,6 +50,7 @@ export function stepEntities(world, dt) {
       const kind = e.type === 'mine' ? 'spin' : e.type === 'barrel' ? 'bump' : 'launch';
       if (applyHit(car, kind, world)) {
         e.alive = false;
+        if (world.online) world.netOut?.push({ k: 'ehit', e: e.id });
         world.events.push({ type: 'explosion', s: e.s, d: e.d, kind: e.type });
         break;
       }

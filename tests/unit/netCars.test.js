@@ -162,3 +162,81 @@ describe('collisions with cars of other phones', () => {
     resolveCarCollisions([c, d]); expect([c.s, c.d, d.s, d.d]).toEqual([100, 0, 100.5, 0.5]);
   });
 });
+
+describe('items and boxes online', () => {
+  const hello = (n, c) => ({ t: 'hello', v: PROTOCOL_VERSION, token: `token-${n}-xxxxxxxx`, name: 'P' + n, color: PLAYER_COLORS[c] });
+  function started() {
+    const r = new RoomCore({ code: 'KRTM', now: 0 }); const ids = [r.join(hello(1, 0), 1).playerId, r.join(hello(2, 1), 2).playerId];
+    for (const id of ids) r.onMessage(id, { t: 'calibrated' }, 5);
+    r.onMessage(ids[0], { t: 'start_now' }, 10); r.drain(); return { r, ids };
+  }
+  it('the first player to take a box gets it, the second is refused, it opens again later', () => {
+    const { r, ids } = started();
+    r.onMessage(ids[0], { t: 'box_take', b: 7, c: 0 }, 1000);
+    expect(r.drain().map((o) => [o.to, o.msg.ok])).toEqual([['all', true]]);
+    r.onMessage(ids[1], { t: 'box_take', b: 7, c: 1 }, 1100);
+    expect(r.drain().map((o) => [o.to, o.msg.ok])).toEqual([[ids[1], false]]);
+    r.onMessage(ids[1], { t: 'box_take', b: 8, c: 1 }, 1100); expect(r.drain()[0].msg.ok).toBe(true);        // another box: fine
+    r.onMessage(ids[1], { t: 'box_take', b: 7, c: 1 }, 1000 + 2900); expect(r.drain()[0].msg.ok).toBe(true);   // respawned
+  });
+  it('nobody can take a box for a car that is not theirs; the host can for bots', () => {
+    const { r, ids } = started();
+    r.onMessage(ids[1], { t: 'box_take', b: 1, c: 0 }, 1000); expect(r.drain().length).toBe(0);
+    r.onMessage(ids[1], { t: 'box_take', b: 1, c: 2 }, 1000); expect(r.drain().length).toBe(0);
+    r.onMessage(ids[0], { t: 'box_take', b: 1, c: 2 }, 1000); expect(r.drain()[0].msg.ok).toBe(true);
+  });
+  it('items are relayed only for cars the sender runs; ehit goes to everybody else', () => {
+    const { r, ids } = started();
+    const mine = { t: 'item', k: 'mine', id: '1.3', c: 1, s: 50, d: 1, tg: -1, rt: 4.5 };
+    r.onMessage(ids[1], mine, 100); expect(r.drain()[0].to).toEqual({ except: ids[1] });
+    r.onMessage(ids[1], { ...mine, c: 0 }, 100); expect(r.drain().length).toBe(0);
+    r.onMessage(ids[0], { t: 'ehit', e: '1.3' }, 100); expect(r.drain()[0].msg).toEqual({ t: 'ehit', e: '1.3' });
+  });
+  it('validation: junk item messages are dropped', () => {
+    for (const bad of [{ t: 'item', k: 'nuke', c: 1 }, { t: 'item', k: 'mine', c: 1, id: 5, s: 1, d: 1, tg: -1 }, { t: 'ehit', e: '' }, { t: 'box_take', b: 'x', c: 1 }]) expect(parseClientMessage(JSON.stringify(bad))).toBeNull();
+    expect(parseClientMessage(JSON.stringify({ t: 'item', k: 'gun', c: 1 }))).toBeTruthy();
+  });
+
+  const mk = (me, host) => createWorld({ track, seed: 5, roster: roster4(2), myCarId: me, hostsBots: host });
+  it('a mine dropped by A appears at B and only hits B’s own car; B’s hit removes it at A', () => {
+    const A = mk(0, true), B = mk(1, false);
+    A.go(); B.go();
+    A.player.s = 200; A.player.d = 2; A.player.speed = 30; A.player.item = 'mine';
+    A.player.input.item = true; A.step(1 / 60);
+    const out = A.netOut.find((o) => o.k === 'mine'); expect(out).toBeTruthy(); expect(String(out.id)).toMatch(/^0\./);
+    expect(B.spawnRemoteItem({ ...out, rt: A.time }, B.time)).toBe(true);
+    expect(B.spawnRemoteItem({ ...out, rt: A.time }, B.time)).toBe(false);                    // a duplicate is ignored
+    // B drives over it
+    B.player.s = out.s - 0.5; B.player.d = out.d; B.player.speed = 30; B.player.invulnT = 0;
+    B.step(1 / 60);
+    expect(B.player.hit.kind).toBe('spin');
+    const hit = B.netOut.find((o) => o.k === 'ehit'); expect(hit.e).toBe(out.id);
+    expect(A.killEntity(hit.e)).toBe(true); expect(A.entities.find((e) => e.id === out.id)?.alive ?? false).toBe(false);
+  });
+  it('a mine does not hit the REMOTE copy of a car (its owner decides)', () => {
+    const A = mk(0, true); A.go();
+    const other = A.cars[1]; expect(other.owner).toBe('remote');
+    A.entities.push({ id: '9.1', type: 'mine', ownerId: 9, s: other.s, d: other.d, age: 5, alive: true, travel: 0 });
+    A.step(1 / 60); expect(other.hit.kind).toBeNull();
+  });
+  it('a remote missile flies in my world and can hit my car; the remote gun burst makes bullets here', () => {
+    const B = mk(1, false); B.go();
+    B.player.s = 300; B.player.d = 0; B.player.speed = 30; B.player.invulnT = 0;
+    expect(B.spawnRemoteItem({ k: 'missile', id: '0.4', c: 0, s: 270, d: 0, tg: 1, rt: B.time }, B.time)).toBe(true);
+    let hit = false; for (let i = 0; i < 240 && !hit; i++) { B.step(1 / 60); hit = !!B.player.hit.kind; }
+    expect(hit).toBe(true); expect(B.player.hit.kind).toBe('launch');
+    B.remoteGun(0); B.step(1 / 60); expect(B.entities.some((e) => e.type === 'bullet' && e.ownerId === 0)).toBe(true);
+  });
+  it('remote cars do not pick up boxes locally; takeBox hides a box for the confirmed taker', () => {
+    const A = mk(0, true); A.go();
+    const box = A.boxes[0]; A.cars[1].s = box.s; A.cars[1].d = box.d;
+    A.step(1 / 60); expect(box.t).toBe(0);
+    A.takeBox(0); expect(box.t).toBeGreaterThan(0);
+  });
+  it('entity ids are unique across phones and plain numbers offline', () => {
+    const solo = createWorld({ track, seed: 1 }); solo.player.item = 'mine'; solo.player.input.item = true; solo.go(); solo.step(1 / 60);
+    expect(solo.entities.some((e) => typeof e.id === 'number')).toBe(true);
+    const A = mk(0, true), B = mk(1, false);
+    for (const [w, id] of [[A, '0.'], [B, '1.']]) { w.go(); w.player.item = 'mine'; w.player.input.item = true; w.step(1 / 60); expect(w.netOut.find((o) => o.k === 'mine').id.startsWith(id)).toBe(true); }
+  });
+});
