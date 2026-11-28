@@ -4,6 +4,7 @@ import { CONFIG } from '../config.js';
 import { createRng } from '../sim/rng.js';
 import { createTerrain } from './terrainMath.js';
 import { applySurface } from './textures.js';
+import { buildCityEnvironment } from './CityEnvironment.js';
 
 const SAND = new THREE.Color(0xc99458), DRY = new THREE.Color(0xe0b878), RED = new THREE.Color(0xb4532a), DEEP = new THREE.Color(0x9a6a3a);
 
@@ -30,6 +31,7 @@ function cactusGeometry() {
 }
 
 export function buildEnvironment(track, scene) {
+  if (track.style === 'city') return buildCityEnvironment(track, scene);
   const rng = createRng(11);
   const terrain = createTerrain(track);
   const group = new THREE.Group();

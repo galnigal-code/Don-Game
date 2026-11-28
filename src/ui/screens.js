@@ -1,5 +1,5 @@
 // Menu and calibration screens (Hebrew, RTL).
-export function createScreens(root, tilt, { onPlay, onStart, onCreate, onJoin, onRecalibrate }) {
+export function createScreens(root, tilt, { onPlay, onStart, onCreate, onJoin, onRecalibrate, onTrack }) {
   const el = document.createElement('div');
   el.id = 'screens';
   el.innerHTML = `
@@ -7,6 +7,7 @@ export function createScreens(root, tilt, { onPlay, onStart, onCreate, onJoin, o
       <div class="panel">
         <div class="logo">Don Game</div>
         <p>מרוץ מדבר. מטים את הטלפון כמו הגה, אוספים הפתעות ומכשילים את היריבים.</p>
+        <div class="trkpick" id="trk-menu"><button data-t="city">עיר בשקיעה</button><button data-t="desert">מדבר</button></div>
         <button class="big" id="btn-play">מרוץ נגד המחשב</button>
         <div class="row" id="menu-online" hidden>
           <button class="big alt" id="btn-create">פתח חדר</button>
@@ -51,6 +52,8 @@ export function createScreens(root, tilt, { onPlay, onStart, onCreate, onJoin, o
   $('btn-create').addEventListener('click', () => onCreate());
   $('btn-join').addEventListener('click', () => onJoin());
   $('btn-menu-recal').addEventListener('click', () => onRecalibrate());
+  $('trk-menu').addEventListener('click', (e) => { const t = e.target.dataset?.t; if (t) onTrack(t); });
+  const paintTrack = (id) => { for (const b of $('trk-menu').children) b.classList.toggle('on', b.dataset.t === id); };
   $('btn-start').addEventListener('click', () => onStart());
   $('btn-invert').addEventListener('click', () => tilt.flipDirection());
   $('btn-redo').addEventListener('click', () => tilt.beginProtocol());
@@ -65,7 +68,8 @@ export function createScreens(root, tilt, { onPlay, onStart, onCreate, onJoin, o
 
   let openedAt = 0, visible = null;
   const api = {
-    showMenu(online = false, calibrated = false) { visible = 'menu'; menu.hidden = false; calib.hidden = true; $('menu-online').hidden = !online; $('btn-menu-recal').hidden = !calibrated; $('hint-menu').hidden = !portrait(); },
+    showMenu(online = false, calibrated = false, trackId = null) { if (trackId) paintTrack(trackId); visible = 'menu'; menu.hidden = false; calib.hidden = true; $('menu-online').hidden = !online; $('btn-menu-recal').hidden = !calibrated; $('hint-menu').hidden = !portrait(); },
+    setTrack(id) { paintTrack(id); },
     setStartLabel(text) { $('btn-start').textContent = text; },
     showCalibrate() {
       visible = 'calib'; menu.hidden = true; calib.hidden = false; openedAt = performance.now();

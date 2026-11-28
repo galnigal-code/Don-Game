@@ -188,3 +188,13 @@ button.big.alt { font-size: clamp(15px, 4.4vmin, 22px); padding: 8px 22px; backg
 #minimap[hidden] { display: none; }
 #ui.hud-hidden #minimap { display: none; }
 #hud-progress { display: none; }    /* replaced by the map */
+
+/* ---- laps (V5): top centre, where the old progress bar was ---- */
+#hud-lap { position: absolute; top: calc(10px + var(--safe-t)); left: 50%; transform: translateX(-50%); padding: 3px 14px; border-radius: 12px; background: rgba(0,0,0,.4);
+  font-weight: 700; font-size: clamp(14px, 4vmin, 22px); direction: rtl; white-space: nowrap; pointer-events: none; }
+#hud-lap[hidden] { display: none; }
+#ui.hud-hidden #hud-lap { display: none; }
+.trkpick { display: flex; justify-content: center; gap: 8px; margin: 8px 0 4px; flex-wrap: wrap; }
+.trkpick button { font: inherit; font-size: clamp(13px, 3.6vmin, 18px); padding: 7px 16px; border-radius: 12px; border: 2px solid rgba(255,255,255,.45); background: rgba(0,0,0,.25); color: #fff; touch-action: manipulation; }
+.trkpick button.on { background: #ffd23f; color: #3a2400; border-color: #ffd23f; font-weight: 700; }
+.trkpick button:disabled { opacity: .85; }

@@ -6,7 +6,6 @@ import { createBrain, driveBot } from './BotDriver.js';
 import { resolveCarCollisions } from './collisions.js';
 import { computeRanks } from './race.js';
 import { createRoller, stepRoller, placeAheadOfRoller } from './roller.js';
-import { FIXED_OBSTACLES } from './trackData.js';
 import { generateBoxes } from './boxLayout.js';
 import { useItem, stepGun, stepBoxes } from './items.js';
 import { stepEntities } from './entities.js';
@@ -59,7 +58,7 @@ export function createWorld({ track, seed = 1, bots = 3, roller = CONFIG.roller.
     }
   }
 
-  const fixed = FIXED_OBSTACLES.map((o, i) => ({ id: i + 1, type: o.kind, s: o.s, d: o.d, ownerId: -1, age: 0, alive: true, travel: 0, fixed: true }));
+  const fixed = (track.obstacles || []).map((o, i) => ({ id: i + 1, type: o.kind, s: o.s, d: o.d, ownerId: -1, age: 0, alive: true, travel: 0, fixed: true }));
   const world = {
     track, rng, time: 0, cars, player, brains,
     entities: fixed, boxes: generateBoxes(track, createRng(seed * 7919 + 13)),   // separate rng: the layout must not disturb the bots' randomness

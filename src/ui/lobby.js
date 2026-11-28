@@ -28,6 +28,7 @@ export function createLobbyScreens(root, h) {
     </div></div>
     <div class="screen" id="scr-lobby" hidden><div class="panel">
       <div class="title">חדר <span class="code" id="lobby-code" dir="ltr"></span></div>
+      <div class="trkpick" id="lobby-trk"><button data-t="city">עיר בשקיעה</button><button data-t="desert">מדבר</button></div>
       <div class="row">
         <button class="ghost" id="btn-wa">שתף בוואטסאפ</button>
         <button class="ghost" id="btn-copy">העתק קישור</button>
@@ -72,6 +73,7 @@ export function createLobbyScreens(root, h) {
   });
   $('btn-copy').addEventListener('click', async () => { try { await navigator.clipboard.writeText(shareUrl); h.toast('הקישור הועתק'); } catch { h.toast(shareUrl, 4000); } });
   $('btn-lobby-start').addEventListener('click', () => h.onStartNow());
+  $('lobby-trk').addEventListener('click', (e) => { const t = e.target.dataset?.t; if (t && lastRoom?.hostId === me) h.onTrack(t); });
   $('btn-lobby-watch').addEventListener('click', () => h.onWatch());
   $('btn-lobby-calib').addEventListener('click', () => h.onCalibrate());
   $('btn-lobby-recal').addEventListener('click', () => h.onCalibrate());
@@ -82,6 +84,7 @@ export function createLobbyScreens(root, h) {
     if (!lastRoom) return;
     const r = lastRoom, mine = r.players.find((p) => p.id === me);
     $('lobby-code').textContent = r.code;
+    { const host = r.hostId === me; for (const b of $('lobby-trk').children) { b.classList.toggle('on', b.dataset.t === r.trackId); b.disabled = !host || r.phase !== 'lobby'; } }       // the host picks the track, everybody sees it
     $('lobby-players').innerHTML = r.players.map((p) =>
       `<div class="pl${p.connected ? '' : ' off'}"><i style="background:${hex(p.color)}"></i><span class="nm">${esc(p.name)}${p.id === me ? ' (אתה)' : ''}</span>${p.id === r.hostId ? '<span>👑</span>' : ''}<span class="st">${!p.connected ? '📶' : p.calibrated ? '✓ מוכן' : '…מכייל'}</span></div>`).join('');
     const isHost = r.hostId === me, ready = !!mine?.calibrated;

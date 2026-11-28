@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { CONFIG } from '../config.js';
 import { createTrack } from '../sim/TrackModel.js';
+import { DEFAULT_TRACK, TRACKS, isTrackId } from '../sim/tracks/index.js';
 import { createWorld } from '../sim/World.js';
 import { createBrain, drivePlayerProxy } from '../sim/BotDriver.js';
 import { createRng } from '../sim/rng.js';
@@ -58,13 +59,11 @@ export class Game {
 
     const r = createRenderer(canvas);
     this.renderer = r.renderer; this.scene = r.scene; this.camera = r.camera; this.setRatioCap = r.setRatioCap; this.gfx = r;
-    this.track = createTrack();
-    this.trackMesh = buildTrackMesh(this.track);
-    this.trackMesh.traverse((o) => { if (o.isMesh) o.receiveShadow = true; });
-    this.scene.add(this.trackMesh);
-    this.env = buildEnvironment(this.track, this.scene);
-    this.env.group.children[0].receiveShadow = true;
     this.surfaceTex = null;
+    // which track: ?track=... (tests) > the last choice > the city
+    let want = params.get('track');
+    if (!isTrackId(want)) { try { want = localStorage.getItem('dongame.track'); } catch { want = null; } }
+    this.loadTrack(isTrackId(want) ? want : DEFAULT_TRACK, { remember: false });
     this.setupQuality(params);
     if (!params.has('notex')) loadSurfaceTextures().then((t) => { this.surfaceTex = t; this.applyQuality(this.qLevel); window.__texLoaded = true; });
     this.rig = new CameraRig(this.camera);
@@ -89,6 +88,7 @@ export class Game {
       onRecalibrate: () => this.toCalibrate(),
       onSkip: () => { this.skipping = true; },
     });
+    this.uiRoot = uiRoot;
     this.minimap = createMinimap(uiRoot, this.track);
     this.sound = new Sound();
     const mute = document.createElement('button');
@@ -110,12 +110,12 @@ export class Game {
     uiRoot.appendChild(flip); uiRoot.appendChild(toast);
     // any first tap unlocks audio (autopilot / skipCalib flows have no "play" button)
     addEventListener('pointerdown', () => this.sound.unlock(), { once: false, capture: true });
-    this.screens = createScreens(uiRoot, this.tilt, { onPlay: () => this.onPlay(), onStart: () => this.onStartRace(), onCreate: () => this.openProfile('create'), onJoin: () => this.openProfile('join'), onRecalibrate: () => this.onRecalibrateTap() });
+    this.screens = createScreens(uiRoot, this.tilt, { onPlay: () => this.onPlay(), onStart: () => this.onStartRace(), onCreate: () => this.openProfile('create'), onJoin: () => this.openProfile('join'), onRecalibrate: () => this.onRecalibrateTap(), onTrack: (id) => { this.loadTrack(id); this.screens.setTrack(id); } });
     this.serverUrl = roomsUrl(params);
     this.net = null; this.roomMsg = null; this.lastResults = null; this.progAcc = 0; this.sendAcc = 0; this.netStats = { itemsIn: 0, ehitIn: 0, boxOk: 0, boxDenied: 0 }; this.remotes = new Map(); this.roomRoster = null;
     this.lobbyUI = createLobbyScreens(uiRoot, {
       onBack: () => this.toMenu(), onProfileDone: (mode, profile, code) => this.profileDone(mode, profile, code),
-      onStartNow: () => this.net?.send({ t: 'start_now' }), onCalibrate: () => this.toCalibrate(),
+      onStartNow: () => this.net?.send({ t: 'start_now' }), onTrack: (id) => this.net?.send({ t: 'track', id }), onCalibrate: () => this.toCalibrate(),
       onLeave: () => this.leaveRoom(), onEmoji: (e) => this.sendEmoji(e), onWatch: () => this.startSpectating(), canWatch: () => !!this.pendingSpectate,
       toast: (t, ms) => this.showToast(t, ms), serverNow: () => (this.net ? this.net.serverNow() : Date.now()),
     });
@@ -135,6 +135,28 @@ export class Game {
       if (!document.hidden && this.state !== 'menu' && this.state !== 'calibrate') this.keepAwake();
     });
     this.frame = this.frame.bind(this);
+  }
+
+  /* ---------- tracks ---------- */
+
+  /** Build (or rebuild) everything that belongs to a track: road, scenery, map, sky and light. */
+  loadTrack(id, { remember = true } = {}) {
+    if (!isTrackId(id)) id = DEFAULT_TRACK;
+    if (this.track?.id === id) return;
+    const drop = (obj) => { if (!obj) return; this.scene.remove(obj); obj.traverse((o) => { o.geometry?.dispose?.(); const m = o.material; if (m) for (const mm of Array.isArray(m) ? m : [m]) mm.dispose?.(); }); };
+    drop(this.trackMesh); drop(this.env?.group);
+    this.track = createTrack(id);
+    this.trackMesh = buildTrackMesh(this.track);
+    this.trackMesh.traverse((o) => { if (o.isMesh) o.receiveShadow = true; });
+    this.scene.add(this.trackMesh);
+    this.env = buildEnvironment(this.track, this.scene);
+    this.env.group.children[0].receiveShadow = true;
+    this.gfx.setTheme(this.track.style);
+    if (this.entityViews) this.entityViews.track = this.track;
+    if (this.minimap) { this.minimap.el.remove(); this.minimap = createMinimap(this.uiRoot, this.track); }
+    this.lastLap = 0;
+    if (remember) { try { localStorage.setItem('dongame.track', id); } catch { /* ignore */ } }
+    if (this.qCfg) this.applyQuality(this.qLevel);       // the new meshes get this quality level's textures
   }
 
   /* ---------- quality ---------- */
@@ -204,7 +226,7 @@ export class Game {
 
   setHudVisible(v) { this.uiRoot.classList.toggle('hud-hidden', !v); }
   toMenu() {
-    this.sound.stopMusic(); this.state = 'menu'; this.setHudVisible(false); this.lobbyUI.hide(); this.screens.showMenu(!!this.serverUrl, this.tilt.hasSavedDirection); }
+    this.sound.stopMusic(); this.state = 'menu'; this.setHudVisible(false); this.lobbyUI.hide(); this.screens.showMenu(!!this.serverUrl, this.tilt.hasSavedDirection, this.track.id); }
   toCalibrate() { this.tilt.forgetDirection(); this.lobbyUI.hide(); this.sound.stopMusic(); this.state = 'calibrate'; this.setHudVisible(false); this.hud.reset(); this.screens.showCalibrate(); }
 
   /* ---------- playing with friends ---------- */
@@ -316,6 +338,7 @@ export class Game {
   /** Joined in the middle of a race: watch it (nothing is driven here) until the room goes back to the lobby. */
   startSpectating() {
     const m = this.pendingSpectate; if (!m || !this.net) return;
+    this.loadTrack(m.trackId);
     this.spectating = true; this.raceSeed = m.seed; this.roomRoster = m.roster; this.hostsBots = false; this.myCarId = -1;
     this.lobbyUI.hide(); this.screens.hide();
     this.newRace(); this.setHudVisible(true);
@@ -329,6 +352,7 @@ export class Game {
     if (this.raceStartNet?.raceNo === m.raceNo && this.world?.online && ['countdown', 'racing', 'spectate'].includes(this.state)) return;   // we reconnected in the middle of this race
     this.pendingSpectate = null; this.spectating = false;
     this.lobbyUI.hide(); this.emojiBar(true);
+    this.loadTrack(m.trackId);
     this.raceSeed = m.seed; this.raceStartNet = m;
     this.roomRoster = m.roster; this.hostsBots = m.hostId === this.net.you;
     this.myCarId = m.roster.find((c) => c.playerId === this.net.you)?.carId ?? 0;
@@ -787,7 +811,12 @@ export class Game {
     this.effects.update(dt);
     this.frameSounds(player, target);
     this.particles.update(dt, this.camera, this.renderer.domElement.height);
-    this.hud.update({ car: player, cars: w.cars, length: this.track.finishS, roller: w.roller });
+    const lap = this.track.lapAt(player.s);
+    this.hud.update({ car: player, cars: w.cars, length: this.track.finishS, roller: w.roller, lap, laps: this.track.laps });
+    if (this.track.laps > 1 && (this.state === 'racing') && lap !== this.lastLap) {
+      if (this.lastLap > 0 && lap === this.track.laps) this.showToast('הקפה אחרונה!', 2200);
+      this.lastLap = lap;
+    }
     if (this.state === 'spectate') this.hud.updateStandings(w.ranked, this.specId);
     this.minimap.setVisible(this.state !== 'spectate');     // the standings take that corner while watching
     this.minimap.update(dt, w.cars, player.id, this.state === 'spectate' ? this.specId : null);

@@ -7,7 +7,7 @@ const requireGlobal = createRequire(execSync('npm root -g').toString().trim() + 
 const { chromium } = requireGlobal('playwright');
 
 const base = process.argv[2] || 'http://localhost:4173/Don-Game/';
-const url = `${base}?autopilot=1&fast=4&seed=1&debug=1`;     // the roller is shelved (off by default); it has its own scenarios below and in smoke-tilt
+const url = `${base}?autopilot=1&fast=4&seed=1&debug=1&track=desert`;     // the roller is shelved (off by default); it has its own scenarios below and in smoke-tilt
 const shots = process.env.SHOTS;
 const problems = [];
 
@@ -48,7 +48,7 @@ if (shots) await page.screenshot({ path: `${shots}/result.png` });
   p2.on('console', (m) => { if (m.type() === 'error') errs2.push(m.text()); });
   p2.on('pageerror', (e) => errs2.push(String(e)));
   for (const seed of [3, 7]) {
-    await p2.goto(`${base}?autopilot=1&fast=4&seed=${seed}&quality=1&roller=1`);
+    await p2.goto(`${base}?autopilot=1&fast=4&seed=${seed}&quality=1&roller=1&track=desert`);
     await p2.waitForFunction(() => window.__game, null, { timeout: 15000 });
     await p2.waitForFunction(() => !document.getElementById('result').hidden, null, { timeout: 180000, polling: 500 });
     const r = await p2.evaluate(() => { const w = __game.world; return { finished: w.finishOrder.length, flat: w.eliminated.length, rows: document.querySelectorAll('#result-table tr').length, rollerSeen: w.roller.startedAt !== null || w.roller.ended, title: document.getElementById('result-title').textContent }; });

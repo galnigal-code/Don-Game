@@ -13,7 +13,7 @@ async function open(query, { dsf = 1 } = {}) {
   const ctx = await browser.newContext({ viewport: { width: 844, height: 390 }, deviceScaleFactor: dsf });
   const page = await ctx.newPage();
   const errors = []; page.on('pageerror', (e) => errors.push(String(e))); page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
-  await page.goto(base + query);
+  await page.goto(base + query.replace('?', '?track=' + (query.includes('track=') ? '' : 'desert&')));
   await page.waitForFunction(() => window.__game && __game.state === 'racing', null, { timeout: 60000 });
   return { ctx, page, errors };
 }
@@ -78,6 +78,25 @@ async function open(query, { dsf = 1 } = {}) {
 {
   const { ctx, page } = await open('?quality=3&skipCalib=1&seed=3');
   check(await page.evaluate(() => document.getElementById('loading') === null), 'loading cover is removed once the game is running');
+  await ctx.close();
+}
+
+// ---- 6. the city (V5): draw calls, triangles and CPU in the busiest places, at the top two quality levels ----
+for (const q of [2, 3]) {
+  const { ctx, page, errors } = await open(`?track=city&quality=${q}&skipCalib=1&seed=3`);
+  await page.waitForTimeout(1500);
+  const sample = async (label, setup) => {
+    if (setup) await page.evaluate(setup);
+    await page.waitForTimeout(900);
+    const info = await page.evaluate(() => ({ calls: __game.renderer.info.render.calls, tris: __game.renderer.info.render.triangles }));
+    const budget = q === 3 ? 130 : 100;
+    check(info.calls <= budget, `city q${q} ${label}: ${info.calls} draw calls (budget ${budget})`);
+    check(info.tris <= 160000, `city q${q} ${label}: ${info.tris} triangles (budget 160k)`);
+  };
+  await sample('start grid');
+  await sample('a bend with opponents', () => { const g = __game, c = g.world.player; g.paused = true; c.s = 1250; c.d = 0; g.world.cars.forEach((o, i) => { if (!o.isPlayer) { o.s = 1256 + i * 6; o.d = -4 + i * 3; } }); });
+  await sample('second lap', () => { const c = __game.world.player; c.s = __game.track.lapLength + 400; });
+  check(errors.length === 0, `city q${q}: no console errors` + (errors.length ? ' ' + JSON.stringify(errors) : ''));
   await ctx.close();
 }
 

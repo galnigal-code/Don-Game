@@ -1,18 +1,17 @@
 // Item-box layout: scattered groups (1-2 boxes) at random lateral positions. Pure logic.
 // A new layout is generated for every race (from the race seed), never on ramps, in gaps, at cliff edges or next to obstacles.
 import { CONFIG } from '../config.js';
-import { FIXED_OBSTACLES } from './trackData.js';
 
 /** True if `s` lies on or next to a ramp / trench (where a box would be unfair or unreachable). */
 function inRampZone(track, s, clear) {
-  for (const r of track.ramps) {
+  for (const r of track.allRamps ?? track.ramps) {
     const end = r.gap ? r.gap.to : r.s;
     if (s >= r.s - r.len - clear && s <= end + clear) return true;
   }
   return false;
 }
 
-export function generateBoxes(track, rng, { obstacles = FIXED_OBSTACLES } = {}) {
+export function generateBoxes(track, rng, { obstacles = track.obstacles || [] } = {}) {
   const B = CONFIG.boxes;
   const boxes = [];
   const uniform = (a, b) => a + (b - a) * rng();

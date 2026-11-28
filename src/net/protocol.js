@@ -1,9 +1,10 @@
 // Wire protocol between the game (client) and the room server. JSON messages: { t: <type>, ... }.
-export const PROTOCOL_VERSION = 1;
+export const PROTOCOL_VERSION = 2;       // 2: the room has a track (V5)
 export const MAX_MESSAGE_BYTES = 1024;     // the biggest message is `bots` (3 cars, about 200 bytes)
 export const EMOJIS = ['😂', '🔥', '😡', '👋'];
 
 import { isCarArray } from './carState.js';
+import { isTrackId } from '../sim/tracks/index.js';
 const num = (v) => typeof v === 'number' && Number.isFinite(v);
 const str = (v, max) => typeof v === 'string' && v.length <= max;
 
@@ -20,6 +21,7 @@ const CLIENT = {
   item: (m) => ['mine', 'oil', 'barrel', 'missile', 'gun'].includes(m.k) && Number.isInteger(m.c) && (m.k === 'gun' || (str(m.id, 16) && num(m.s) && num(m.d) && Number.isInteger(m.tg))) && (m.rt === undefined || num(m.rt)),
   ehit: (m) => str(m.e, 16) && m.e.length > 0,
   box_take: (m) => Number.isInteger(m.b) && Number.isInteger(m.c),
+  track: (m) => isTrackId(m.id),
   prog: (m) => num(m.s),
   finish: (m) => num(m.raceTime) && m.raceTime >= 0 && m.raceTime < 3600,
 };

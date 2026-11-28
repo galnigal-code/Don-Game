@@ -77,7 +77,61 @@ class Strip {
   }
 }
 
+function kerbTexture() {
+  const c = document.createElement('canvas'); c.width = 64; c.height = 64;
+  const g = c.getContext('2d'); g.fillStyle = '#e8323c'; g.fillRect(0, 0, 64, 32); g.fillStyle = '#ffffff'; g.fillRect(0, 32, 64, 32);
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t;
+}
+
+/** The city: asphalt, red-white kerbs, pavements and the start gate. The buildings are in CityEnvironment. */
+function buildCityRoad(track) {
+  const group = new THREE.Group();
+  const road = new THREE.MeshLambertMaterial({ color: 0xffffff, map: roadTexture(), side: THREE.DoubleSide });
+  const markings = new THREE.MeshLambertMaterial({ map: markingsTexture(), transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+  const kerb = new THREE.MeshLambertMaterial({ map: kerbTexture(), side: THREE.DoubleSide });
+  const walk = new THREE.MeshLambertMaterial({ color: 0x8a8090, side: THREE.DoubleSide });
+  const roadFallback = road.map;
+  const R = track.runoff, WALK = 5;
+  const P = (sm, lat, y) => [sm.px + sm.rx * lat, sm.py + y, sm.pz + sm.rz * lat];
+  const rows = { road: new Strip(), mark: new Strip(), kl: new Strip(), kr: new Strip(), wl: new Strip(), wr: new Strip() };
+  for (let k = 0; k < track.samples.length; k += 2) {
+    const sm = track.samples[k], hw = sm.halfWidth, v = k * track.step;
+    rows.road.row(P(sm, -hw, 0), P(sm, hw, 0), v / 10);
+    rows.mark.row(P(sm, -hw, 0.03), P(sm, hw, 0.03), v / 10);
+    rows.kr.row(P(sm, hw, 0.02), P(sm, hw + R, 0.02), v * 0.5); rows.kl.row(P(sm, -hw - R, 0.02), P(sm, -hw, 0.02), v * 0.5);
+    rows.wr.row(P(sm, hw + R, 0.14), P(sm, hw + R + WALK, 0.14)); rows.wl.row(P(sm, -hw - R - WALK, 0.14), P(sm, -hw - R, 0.14));
+  }
+  // the last row closes the loop on the first one
+  const first = track.samples[0], hw0 = first.halfWidth;
+  rows.road.row(P(first, -hw0, 0), P(first, hw0, 0), track.lapLength / 10); rows.mark.row(P(first, -hw0, 0.03), P(first, hw0, 0.03), track.lapLength / 10);
+  rows.kr.row(P(first, hw0, 0.02), P(first, hw0 + R, 0.02), track.lapLength * 0.5); rows.kl.row(P(first, -hw0 - R, 0.02), P(first, -hw0, 0.02), track.lapLength * 0.5);
+  rows.wr.row(P(first, hw0 + R, 0.14), P(first, hw0 + R + WALK, 0.14)); rows.wl.row(P(first, -hw0 - R - WALK, 0.14), P(first, -hw0 - R, 0.14));
+  const mats = { road, mark: markings, kl: kerb, kr: kerb, wl: walk, wr: walk };
+  for (const k in rows) { const m = rows[k].mesh(mats[k]); if (m) group.add(m); }
+
+  // start / finish gate (a loop has one line: the start and the finish are the same place)
+  const sm = track.sample(0), hw = sm.halfWidth, holder = new THREE.Group();
+  holder.position.set(sm.px, sm.py, sm.pz); holder.rotation.set(Math.asin(sm.ty), -sm.heading, 0, 'YXZ');
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(hw * 2, 3), new THREE.MeshBasicMaterial({ map: checkerTexture(16, 2) }));
+  floor.rotation.x = -Math.PI / 2; floor.position.y = 0.05; holder.add(floor);
+  const pole = new THREE.MeshLambertMaterial({ color: 0xe8e2d6 });
+  for (const sd of [-1, 1]) { const p = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 7, 8), pole); p.position.set(sd * (hw + R + 0.6), 3.5, 0); holder.add(p); }
+  const banner = new THREE.Mesh(new THREE.BoxGeometry((hw + R + 0.6) * 2, 1.4, 0.4), new THREE.MeshBasicMaterial({ map: checkerTexture(24, 2) }));
+  banner.position.set(0, 6.6, 0); holder.add(banner);
+  group.add(holder);
+
+  group.userData.applySurfaces = (tex, flags) => {
+    const useTex = !!(flags.tex && tex?.road?.diff);
+    if (useTex) { tex.road.diff.repeat.set(Math.max(1, (hw * 2) / 3.4), 3); if (tex.road.nor) tex.road.nor.repeat.set(Math.max(1, (hw * 2) / 3.4), 3); }
+    road.map = useTex ? tex.road.diff : roadFallback;
+    road.normalMap = useTex && flags.normal ? tex.road.nor : null;
+    road.needsUpdate = true;
+  };
+  return group;
+}
+
 export function buildTrackMesh(track) {
+  if (track.style === 'city') return buildCityRoad(track);
   const group = new THREE.Group();
   const SE = CONFIG.track.SAND_EXTRA;
   const mat = (color, extra = {}) => new THREE.MeshLambertMaterial({ color, side: THREE.DoubleSide, ...extra });   // no specular needed: much cheaper than Standard on phones

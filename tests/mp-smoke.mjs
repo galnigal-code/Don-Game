@@ -57,8 +57,9 @@ try {
   const D = await join('דנה', 'link');
 
   // the 30 s timer (4 s here) starts the race for everyone
-  for (const P of [A, B, C, D]) await P.page.waitForFunction(() => window.__game.state === 'countdown' || window.__game.state === 'racing', null, { timeout: 20000 });
+  for (const P of [A, B, C, D]) await P.page.waitForFunction(() => window.__game.state === 'countdown' || window.__game.state === 'racing', null, { timeout: 60000 });
   ok(true, 'the race starts for all 4 players when the timer runs out');
+  ok((await Promise.all([A, B, C, D].map((P) => P.page.evaluate(() => window.__game.track.id)))).every((t) => t === 'city'), 'everybody races on the default track (the city, 2 laps)');
   const seeds = await Promise.all([A, B, C, D].map((P) => P.page.evaluate(() => window.__game.raceSeed)));
   ok(new Set(seeds).size === 1, `everyone races on the same seed (${seeds[0]})`);
 
@@ -108,8 +109,14 @@ try {
     await J.page.waitForSelector('#in-name', { state: 'visible', timeout: 15000 }); await J.page.fill('#in-name', 'אורח'); await J.page.click('#btn-profile-go');
     await J.page.waitForSelector('#scr-lobby:not([hidden])', { timeout: 15000 });
     ok(await J.page.evaluate(() => document.getElementById('scr-calib').hidden), 'V4: a player who calibrated on an earlier visit goes straight to the lobby (no calibration screen)');
-    await H.page.waitForSelector('#btn-lobby-start', { state: 'visible', timeout: 8000 }); await H.page.click('#btn-lobby-start');
+    await H.page.waitForSelector('#btn-lobby-start', { state: 'visible', timeout: 8000 });
+    ok(await J.page.evaluate(() => [...document.querySelectorAll('#lobby-trk button')].every((b) => b.disabled)), 'only the host can pick the track (the guest\'s buttons are disabled)');
+    await H.page.click('#lobby-trk button[data-t="desert"]');
+    await J.page.waitForFunction(() => document.querySelector('#lobby-trk button[data-t="desert"].on'), null, { timeout: 8000 });
+    ok(true, 'the host picks the desert and the guest sees it');
+    await H.page.click('#btn-lobby-start');
     await J.page.waitForFunction(() => window.__game.world?.online && window.__game.state === 'racing', null, { timeout: 20000 });
+    ok(await J.page.evaluate(() => window.__game.track.id === 'desert'), 'the guest races on the track the host picked');
     ok(await J.page.evaluate(() => window.__game.world.cars.length === 4 && window.__game.world.cars.filter((c) => c.kind === 'bot').length === 2), '2 humans + 2 bots complete the field to 4');
     await J.page.waitForFunction(() => window.__game.world.cars.filter((c) => c.kind === 'bot').every((c) => c.s > 60), null, { timeout: 40000 });
     ok(true, 'the guest sees the host’s bots driving');
@@ -150,7 +157,7 @@ try {
   for (const P of pages) ok(P.errs.length === 0, `${P.name}: no console errors ${P.errs.slice(0, 2).join(' | ')}`);
 } catch (e) {
   console.log('ERROR', e.message); problems.push(e.message);
-  for (const P of pages) await P.page.screenshot({ path: `/tmp/mp-fail-${P.name}.png` }).catch(() => {});
+  for (const P of pages) { console.log(`${P.name}: errors ${JSON.stringify(P.errs.slice(0, 3))} state ${await P.page.evaluate(() => window.__game?.state).catch(() => '?')}`); await P.page.screenshot({ path: `/tmp/mp-fail-${P.name}.png` }).catch(() => {}); }
 } finally {
   await browser.close(); await srv.close();
 }

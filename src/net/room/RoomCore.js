@@ -4,6 +4,7 @@
 import { PROTOCOL_VERSION } from '../protocol.js';
 import { cleanName } from '../nameFilter.js';
 import { createRng } from '../../sim/rng.js';
+import { isTrackId } from '../../sim/tracks/index.js';
 import { BOT_NAMES } from '../../sim/botNames.js';
 import { awardPoints, scoreTable } from './scoring.js';
 
@@ -20,6 +21,7 @@ export class RoomCore {
     this.code = code;
     this.lobbyTimerMs = lobbyTimerMs;
     this.phase = 'lobby';                 // lobby | racing | results
+    this.trackId = 'city';                // chosen by the host
     this.hostId = null; this.nextId = 1; this.raceNo = 0;
     this.seed = 0; this.goAt = 0; this.timerEnd = null; this.resultsEnd = null; this.firstFinishAt = null;
     this.emptySince = now; this.closed = false;
@@ -114,6 +116,9 @@ export class RoomCore {
       case 'ping': this.send(playerId, { t: 'pong', c: m.c, s: now }); break;
       case 'calibrated':
         if (this.phase === 'lobby') { p.calibrated = true; this.pushRoom(); }
+        break;
+      case 'track':
+        if (playerId === this.hostId && this.phase === 'lobby' && isTrackId(m.id) && m.id !== this.trackId) { this.trackId = m.id; this.pushRoom(); }
         break;
       case 'start_now':
         if (playerId === this.hostId && this.phase === 'lobby') this.startRace(now, true);
@@ -225,7 +230,7 @@ export class RoomCore {
   }
 
   raceStartMsg() {
-    return { t: 'race_start', raceNo: this.raceNo, seed: this.seed, roster: this.roster, goAt: this.goAt, hostId: this.hostId };
+    return { t: 'race_start', raceNo: this.raceNo, trackId: this.trackId, seed: this.seed, roster: this.roster, goAt: this.goAt, hostId: this.hostId };
   }
 
   maybeEndRace(now) {
@@ -262,20 +267,20 @@ export class RoomCore {
   /* ---------- broadcast + persistence ---------- */
   pushRoom() {
     this.send('all', {
-      t: 'room', code: this.code, phase: this.phase, hostId: this.hostId, raceNo: this.raceNo, timerEnd: this.timerEnd,
+      t: 'room', code: this.code, trackId: this.trackId, phase: this.phase, hostId: this.hostId, raceNo: this.raceNo, timerEnd: this.timerEnd,
       players: [...this.players.values()].map((p) => ({ id: p.id, name: p.name, color: p.color, connected: p.connected, calibrated: p.calibrated, inRace: p.inRace })),
       scores: scoreTable(this.scores),
     });
   }
 
   snapshot() {
-    const { code, lobbyTimerMs, phase, hostId, nextId, raceNo, seed, goAt, timerEnd, resultsEnd, firstFinishAt, emptySince, closed, roster } = this;
-    return { code, lobbyTimerMs, phase, hostId, nextId, raceNo, seed, goAt, timerEnd, resultsEnd, firstFinishAt, emptySince, closed, roster,
+    const { code, lobbyTimerMs, trackId, phase, hostId, nextId, raceNo, seed, goAt, timerEnd, resultsEnd, firstFinishAt, emptySince, closed, roster } = this;
+    return { code, lobbyTimerMs, trackId, phase, hostId, nextId, raceNo, seed, goAt, timerEnd, resultsEnd, firstFinishAt, emptySince, closed, roster,
       players: [...this.players.values()], scores: [...this.scores.entries()] };
   }
   static restore(s) {
     const r = new RoomCore({ code: s.code, lobbyTimerMs: s.lobbyTimerMs });
-    Object.assign(r, { phase: s.phase, hostId: s.hostId, nextId: s.nextId, raceNo: s.raceNo, seed: s.seed, goAt: s.goAt, timerEnd: s.timerEnd, resultsEnd: s.resultsEnd, firstFinishAt: s.firstFinishAt, emptySince: s.emptySince, closed: s.closed, roster: s.roster });
+    Object.assign(r, { trackId: s.trackId ?? 'city', phase: s.phase, hostId: s.hostId, nextId: s.nextId, raceNo: s.raceNo, seed: s.seed, goAt: s.goAt, timerEnd: s.timerEnd, resultsEnd: s.resultsEnd, firstFinishAt: s.firstFinishAt, emptySince: s.emptySince, closed: s.closed, roster: s.roster });
     r.players = new Map(s.players.map((p) => [p.id, p]));
     r.scores = new Map(s.scores);
     return r;

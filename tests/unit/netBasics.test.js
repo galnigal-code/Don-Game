@@ -21,6 +21,7 @@ describe('nicknames', () => {
 });
 describe('protocol validation', () => {
   const ok = (o) => parseClientMessage(JSON.stringify(o));
+  it('track messages: only known tracks pass', () => { expect(ok({ t: 'track', id: 'city' })).toBeTruthy(); expect(ok({ t: 'track', id: 'desert' })).toBeTruthy(); expect(ok({ t: 'track', id: 'moon' })).toBeNull(); expect(ok({ t: 'track' })).toBeNull(); });
   it('accepts valid messages', () => { expect(ok({ t: 'ping', c: 1 })).toBeTruthy(); expect(ok({ t: 'emoji', e: '🔥' })).toBeTruthy(); expect(ok({ t: 'finish', raceTime: 80.5 })).toBeTruthy(); });
   it('rejects garbage', () => {
     for (const bad of [{ t: 'emoji', e: '💩' }, { t: 'finish', raceTime: -1 }, { t: 'finish', raceTime: 'x' }, { t: 'nope' }, { t: 'hello', v: 1, token: 'short', name: 'x', color: 1 }, null, 5]) expect(ok(bad)).toBeNull();

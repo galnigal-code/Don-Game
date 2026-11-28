@@ -12,6 +12,7 @@ export function createHud(root, { onRestart, onRecalibrate, onSkip }) {
     <div id="hud-top">
       <div id="hud-pos"><span class="lbl">מקום</span><b>1</b><span class="of">/4</span></div>
       <div id="hud-speed"><b>0</b> קמ"ש</div>
+      <div id="hud-lap" hidden>הקפה <b>1</b>/2</div>
     </div>
     <div id="hud-progress"><div id="hud-dots"></div></div>
     <button id="btn-turbo" class="gbtn" aria-label="טורבו"><span id="turbo-ring"></span><span class="ico">🔥</span><span id="turbo-count">2</span></button>
@@ -71,7 +72,10 @@ export function createHud(root, { onRestart, onRecalibrate, onSkip }) {
     box.appendChild(rollerDot);
   };
 
-  hud.update = ({ car, cars, length, roller }) => {
+  hud.update = ({ car, cars, length, roller, lap = 1, laps = 1 }) => {
+    const lapEl = $('hud-lap');
+    if (lapEl.hidden === (laps > 1)) lapEl.hidden = !(laps > 1);
+    if (laps > 1) set('lap', lapEl, `הקפה ${lap}/${laps}`);
     set('spd', $('hud-speed').firstElementChild, String(Math.round(car.speed * 3.6)));
     const posEl = $('hud-pos');
     set('pos', posEl.querySelector('b'), car.state === 'eliminated' ? '✕' : String(car.finishTime != null ? car.place : car.rank));

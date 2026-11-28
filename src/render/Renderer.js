@@ -20,6 +20,20 @@ function skyTexture() {
   return t;
 }
 
+function citySkyTexture() {
+  const c = document.createElement('canvas'); c.width = 4; c.height = 256;
+  const g = c.getContext('2d'), grad = g.createLinearGradient(0, 0, 0, 256);
+  grad.addColorStop(0, '#2b2152'); grad.addColorStop(0.35, '#8a3f78'); grad.addColorStop(0.62, '#ff7f50'); grad.addColorStop(0.78, '#ffc27a'); grad.addColorStop(1, '#ffd9a0');
+  g.fillStyle = grad; g.fillRect(0, 0, 4, 256);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+
+/** Look of each track: sky, fog, lights. `lit` = intensities when real shadows are on (less flat fill, more sun). */
+const THEMES = {
+  desert: { sky: skyTexture, fog: HORIZON, hemi: [0xcfe6ff, 0xc9a36b], sunColor: 0xffc88a, sunDir: [-50, 40, -84], hemiI: 1.3, sunI: 2.4, hemiLit: 0.95, sunLit: 3.2 },
+  city: { sky: citySkyTexture, fog: 0xe9906a, hemi: [0xffd2b0, 0x4a3a58], sunColor: 0xffa060, sunDir: [-60, 50, -55], hemiI: 1.15, sunI: 1.9, hemiLit: 0.85, sunLit: 2.6 },
+};
+
 export function createRenderer(canvas) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: window.devicePixelRatio < 2, powerPreference: 'high-performance' });
   let ratioCap = CONFIG.render.MAX_PIXEL_RATIO;
@@ -65,11 +79,22 @@ export function createRenderer(canvas) {
   const sc = sun.shadow.camera; sc.left = -22; sc.right = 22; sc.top = 22; sc.bottom = -22; sc.near = 1; sc.far = 160; sc.updateProjectionMatrix();
   sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.06;
   const sunOffset = new THREE.Vector3(-50, 40, -84).normalize().multiplyScalar(70);
+  let theme = THEMES.desert, shadowsOn = false;
+  const applyLights = () => { hemi.intensity = shadowsOn ? theme.hemiLit : theme.hemiI; sun.intensity = shadowsOn ? theme.sunLit : theme.sunI; };
+  const skyCache = {};
+  const setTheme = (style) => {
+    theme = THEMES[style] || THEMES.desert;
+    scene.background = skyCache[style] ||= theme.sky();
+    scene.fog.color.setHex(theme.fog);
+    hemi.color.setHex(theme.hemi[0]); hemi.groundColor.setHex(theme.hemi[1]); sun.color.setHex(theme.sunColor);
+    sun.position.set(...theme.sunDir); sunOffset.set(...theme.sunDir).normalize().multiplyScalar(70);
+    applyLights();
+  };
   scene.add(sun.target);
   const setShadows = (on) => {
     if (renderer.shadowMap.enabled !== on) { renderer.shadowMap.enabled = on; renderer.shadowMap.type = THREE.PCFShadowMap; scene.traverse((o) => { if (o.material) o.material.needsUpdate = true; }); }
     sun.castShadow = on;
-    hemi.intensity = on ? 0.95 : 1.3; sun.intensity = on ? 3.2 : 2.4;   // less flat fill, more sun: shadows need contrast to be seen
+    shadowsOn = on; applyLights();   // less flat fill, more sun: shadows need contrast to be seen
   };
   const followShadow = (p) => {
     // snap to the shadow-texel grid so the shadows do not shimmer while the box moves
@@ -92,5 +117,5 @@ export function createRenderer(canvas) {
 
   /** Quality control: change the render resolution without touching anything else. */
   const setRatioCap = (cap) => { ratioCap = cap; applyRatio(); resize(); };
-  return { renderer, scene, camera, sun, resize, setRatioCap, setReflections, setShadows, followShadow };
+  return { renderer, scene, camera, sun, resize, setRatioCap, setReflections, setShadows, followShadow, setTheme };
 }

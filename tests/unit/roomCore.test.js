@@ -175,3 +175,26 @@ describe('RoomCore: misc', () => {
   });
   it('nextWakeup points at the lobby timer', () => { const { r } = room(4); expect(r.nextWakeup()).toBe(r.timerEnd); });
 });
+
+describe('RoomCore: the host picks the track (V5)', () => {
+  it('starts on the city; only the host may change it, only in the lobby, only to a known track', () => {
+    const { r, ids } = room(2);
+    expect(r.trackId).toBe('city');
+    r.onMessage(ids[1], { t: 'track', id: 'desert' }, 100); expect(r.trackId).toBe('city');          // not the host
+    r.onMessage(ids[0], { t: 'track', id: 'desert' }, 100); expect(r.trackId).toBe('desert');
+    expect(r.drain().filter((o) => o.msg.t === 'room').at(-1).msg.trackId).toBe('desert');
+    r.onMessage(ids[0], { t: 'track', id: 'moon' }, 100); expect(r.trackId).toBe('desert');           // the protocol layer also drops it
+  });
+  it('the race starts on the chosen track and tells everybody; it cannot be changed during a race', () => {
+    const { r, ids } = room(2); ready(r, ids);
+    r.onMessage(ids[0], { t: 'track', id: 'desert' }, 100); r.drain();
+    r.onMessage(ids[0], { t: 'start_now' }, 200);
+    expect(sent(r, 'race_start').every((o) => o.msg.trackId === 'desert')).toBe(true);
+    r.onMessage(ids[0], { t: 'track', id: 'city' }, 300); expect(r.trackId).toBe('desert');
+  });
+  it('the choice survives a Durable Object restart and old stored rooms default to the city', () => {
+    const { r, ids } = room(2); r.onMessage(ids[0], { t: 'track', id: 'desert' }, 100);
+    expect(RoomCore.restore(JSON.parse(JSON.stringify(r.snapshot()))).trackId).toBe('desert');
+    const old = r.snapshot(); delete old.trackId; expect(RoomCore.restore(old).trackId).toBe('city');
+  });
+});
