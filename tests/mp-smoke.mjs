@@ -95,23 +95,46 @@ try {
   await G.page.waitForFunction(() => /מלא/.test(document.querySelector('#profile-err')?.textContent || ''), null, { timeout: 8000 });
   ok(true, 'the 7th player is told the room is full');
 
-  // host leaves in the middle of a race: another phone takes over the bots
+  // second room: emoji, reconnect, a spectator who joins mid-race, and the host leaving in the middle of the race
   for (const P of pages) await P.page.context().close().catch(() => {});   // free the machine: software rendering of 8 pages is heavy
   {
-    const H = await newPlayer('H', `${base}?${q}`);
+    const q2 = q.replace('fast=4', 'fast=2');
+    const H = await newPlayer('H', `${base}?${q2}`);
     await H.page.waitForSelector('#btn-create', { state: 'visible', timeout: 15000 }); await H.page.click('#btn-create');
     await H.page.fill('#in-name', 'מארח'); await H.page.click('#btn-profile-go');
     await H.page.waitForSelector('#btn-start:not([disabled])', { timeout: 15000 }); await H.page.click('#btn-start');
     await H.page.waitForSelector('#scr-lobby:not([hidden])'); const code2 = (await H.page.textContent('#lobby-code')).trim();
-    const J = await newPlayer('J', `${base}?${q}&room=${code2}`);
+    const J = await newPlayer('J', `${base}?${q2}&room=${code2}`);
     await J.page.waitForSelector('#in-name', { state: 'visible', timeout: 15000 }); await J.page.fill('#in-name', 'אורח'); await J.page.click('#btn-profile-go');
     await J.page.waitForSelector('#btn-start:not([disabled])', { timeout: 15000 }); await J.page.click('#btn-start');
     await J.page.waitForSelector('#scr-lobby:not([hidden])');
     await H.page.waitForSelector('#btn-lobby-start', { state: 'visible', timeout: 8000 }); await H.page.click('#btn-lobby-start');
     await J.page.waitForFunction(() => window.__game.world?.online && window.__game.state === 'racing', null, { timeout: 20000 });
     ok(await J.page.evaluate(() => window.__game.world.cars.length === 4 && window.__game.world.cars.filter((c) => c.kind === 'bot').length === 2), '2 humans + 2 bots complete the field to 4');
-    await J.page.waitForFunction(() => window.__game.world.cars.filter((c) => c.kind === 'bot').every((c) => c.s > 80), null, { timeout: 40000 });
+    await J.page.waitForFunction(() => window.__game.world.cars.filter((c) => c.kind === 'bot').every((c) => c.s > 60), null, { timeout: 40000 });
     ok(true, 'the guest sees the host’s bots driving');
+
+    // emoji from J shows above J's car on H's screen
+    await J.page.evaluate(() => window.__game.sendEmoji('🔥'));
+    await H.page.waitForFunction(() => window.__game.world.cars.some((c) => c.owner === 'remote' && c.kind === 'human' && c.bubbleT > 0 && c.bubbleE === '🔥'), null, { timeout: 8000 });
+    ok(true, 'an emoji sent by one player appears above their car on the other phone');
+
+    // J loses the connection for a moment: same player, same race, nothing restarts
+    await J.page.evaluate(() => { window.__w = window.__game.world; window.__you = window.__game.net.you; window.__game.net.ws.close(); });
+    await J.page.waitForFunction(() => window.__game.net.ws.readyState === 1 && window.__game.net.you !== null, null, { timeout: 15000 });
+    await new Promise((r) => setTimeout(r, 1500));
+    ok(await J.page.evaluate(() => window.__game.world === window.__w && window.__game.net.you === window.__you && ['racing', 'spectate'].includes(window.__game.state)), 'after a reconnect it is the same player in the same race (nothing restarted)');
+
+    // K joins while the race is running and can watch it
+    const K = await newPlayer('K', `${base}?${q2}&room=${code2}`);
+    await K.page.waitForSelector('#in-name', { state: 'visible', timeout: 20000 }); await K.page.fill('#in-name', 'צופה'); await K.page.click('#btn-profile-go');
+    await K.page.waitForSelector('#btn-start:not([disabled])', { timeout: 15000 }); await K.page.click('#btn-start');
+    await K.page.waitForSelector('#btn-lobby-watch', { state: 'visible', timeout: 15000 });
+    ok(true, 'someone who joins mid-race is offered "watch the race"');
+    await K.page.click('#btn-lobby-watch');
+    await K.page.waitForFunction(() => window.__game.state === 'spectate' && window.__game.world.cars.filter((c) => c.s > 100).length >= 2, null, { timeout: 20000 });
+    ok(true, 'the spectator sees the cars driving');
+
     await H.page.context().close();                     // the host disappears
     await J.page.waitForFunction(() => window.__game.hostsBots === true, null, { timeout: 15000 });
     ok(true, 'the other player became the host');
@@ -119,8 +142,9 @@ try {
     await new Promise((r) => setTimeout(r, 4000));
     const after = await J.page.evaluate(() => window.__game.world.cars.filter((c) => c.kind === 'bot' && c.owner === 'local').map((c) => c.s));
     ok(after.length === 2 && after.every((v, i) => v > before[i] + 20), 'the bots keep driving on the new host phone');
-    await J.page.waitForFunction(() => document.querySelectorAll('#lobby-last .pl').length > 0, null, { timeout: 120000 });
-    ok(true, 'the race still ends with results after the host left');
+    await J.page.waitForFunction(() => document.querySelectorAll('#lobby-last .pl').length > 0, null, { timeout: 150000 });
+    await K.page.waitForFunction(() => document.querySelector('#scr-lobby:not([hidden])') && document.querySelectorAll('#lobby-last .pl').length > 0, null, { timeout: 30000 });
+    ok(true, 'the race ends with results for the players and the spectator, after the host left');
   }
 
   for (const P of pages) ok(P.errs.length === 0, `${P.name}: no console errors ${P.errs.slice(0, 2).join(' | ')}`);

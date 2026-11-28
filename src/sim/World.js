@@ -41,10 +41,12 @@ export function createWorld({ track, seed = 1, bots = 3, roller = CONFIG.roller.
       const [gs, gd] = GRID6[r.slot];
       const car = createCar({ id: r.carId, name: r.name, color: r.color, isPlayer: r.carId === myCarId, s: gs, d: gd });
       car.kind = r.kind; car.owner = (r.carId === myCarId || (r.kind === 'bot' && hostsBots)) ? 'local' : 'remote';
+      car.isPlayer = r.carId === myCarId;
       cars.push(car);
       if (r.carId === myCarId) player = car;
       else if (r.kind === 'bot' && hostsBots) brains.set(car, createBrain(createRng(seed * 31 + r.carId), track, r.carId % 3));
     }
+    if (!player) player = cars.find((c) => c.kind === 'human') || cars[0];     // spectator (myCarId -1): the camera starts on a human, nothing is driven here
   } else {
     player = createCar({ id: 0, name: 'אתה', color: 0xd0201c, isPlayer: true, s: slots[0][0], d: slots[0][1] });
     player.kind = 'human'; player.owner = 'local';

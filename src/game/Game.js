@@ -32,6 +32,15 @@ import { Sound } from '../audio/Sound.js';
 import { BUILD_ID, BUILD_LABEL, isOutdated, fetchPublished } from '../version.js';
 
 const STEP = CONFIG.sim.STEP;
+const emojiTex = new Map();
+function emojiTexture(e) {
+  if (!emojiTex.has(e)) {
+    const c = document.createElement('canvas'); c.width = c.height = 128;
+    const g = c.getContext('2d'); g.font = '96px system-ui, "Apple Color Emoji", "Segoe UI Emoji", sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(e, 64, 70);
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; emojiTex.set(e, t);
+  }
+  return emojiTex.get(e);
+}
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 
 /**
@@ -105,7 +114,7 @@ export class Game {
     this.lobbyUI = createLobbyScreens(uiRoot, {
       onBack: () => this.toMenu(), onProfileDone: (mode, profile, code) => this.profileDone(mode, profile, code),
       onStartNow: () => this.net?.send({ t: 'start_now' }), onCalibrate: () => this.toCalibrate(),
-      onLeave: () => this.leaveRoom(), onEmoji: (e) => this.net?.send({ t: 'emoji', e }),
+      onLeave: () => this.leaveRoom(), onEmoji: (e) => this.sendEmoji(e), onWatch: () => this.startSpectating(), canWatch: () => !!this.pendingSpectate,
       toast: (t, ms) => this.showToast(t, ms), serverNow: () => (this.net ? this.net.serverNow() : Date.now()),
     });
     this.debug = params.has('debug') ? createDebugOverlay(uiRoot, this.renderer, this.tilt) : null;
@@ -237,7 +246,7 @@ export class Game {
       onStatus: (s) => { if (s === 'reconnecting') this.showToast('אין חיבור, מנסה שוב…', 2500); },
       onFatal: (c) => this.netFatal(c),
     } });
-    this.roomCode = code; this.autoCalibFor = -1; this.lastResults = null;
+    this.roomCode = code; this.autoCalibFor = -1; this.lastResults = null; this.joinedRoom = false; this.pendingSpectate = null; this.spectating = false;
     this.net.connect();
   }
 
@@ -255,11 +264,13 @@ export class Game {
 
   shareLink() { const u = new URL(location.href); u.search = ''; u.searchParams.set('room', this.roomCode); if (this.params.get('server')) u.searchParams.set('server', this.params.get('server')); return u.toString(); }
 
-  showLobby() { this.state = 'lobby'; this.screens.hide(); this.setHudVisible(false); this.lobbyUI.showLobby(this.net.you, this.shareLink()); this.lobbyUI.lastResults(this.lastResults, this.net.you); if (this.roomMsg) this.lobbyUI.room(this.roomMsg); }
+  showLobby() { this.keepAwake(); this.state = 'lobby'; this.emojiBar(false); this.screens.hide(); this.setHudVisible(false); this.lobbyUI.showLobby(this.net.you, this.shareLink()); this.lobbyUI.lastResults(this.lastResults, this.net.you); if (this.roomMsg) this.lobbyUI.room(this.roomMsg); }
 
   onNet(m) {
     switch (m.t) {
-      case 'welcome': this.toCalibrate(); this.screens.setStartLabel('אישור'); break;
+      case 'welcome':
+        if (!this.joinedRoom) { this.joinedRoom = true; this.toCalibrate(); this.screens.setStartLabel('אישור'); }   // a reconnect must not restart anything
+        break;
       case 'room':
         this.roomMsg = m; this.lobbyUI.room(m);
         // after a race the lobby asks everyone to calibrate again (the direction is measured before every race)
@@ -267,6 +278,7 @@ export class Game {
         break;
       case 'race_start': this.onRaceStartNet(m); break;
       case 'results':
+        this.spectating = false; this.pendingSpectate = null; this.emojiBar(false);
         this.lastResults = m; this.hud.hideResult(); this.hud.reset(); this.sound.stopMusic();
         this.showLobby(); this.screens.setStartLabel('אישור');
         break;
@@ -280,6 +292,11 @@ export class Game {
       }
       case 'st': if (isCarArray(m.a)) this.remotes.get(m.a[0])?.push(unpackCar(m.a)); break;
       case 'bots': for (const a of m.a || []) if (isCarArray(a)) this.remotes.get(a[0])?.push(unpackCar(a)); break;
+      case 'emoji': {
+        const car = this.world?.online && this.roomRoster ? this.world.cars.find((c) => c.id === this.roomRoster.find((r) => r.playerId === m.from)?.carId) : null;
+        if (car) { car.bubbleE = m.e; car.bubbleT = 2.2; }
+        break;
+      }
       case 'host':
         if (m.id === this.net.you) {
           this.showToast('אתה המארח עכשיו 👑');
@@ -290,9 +307,22 @@ export class Game {
     }
   }
 
+  /** Joined in the middle of a race: watch it (nothing is driven here) until the room goes back to the lobby. */
+  startSpectating() {
+    const m = this.pendingSpectate; if (!m || !this.net) return;
+    this.spectating = true; this.raceSeed = m.seed; this.roomRoster = m.roster; this.hostsBots = false; this.myCarId = -1;
+    this.lobbyUI.hide(); this.screens.hide();
+    this.newRace(); this.setHudVisible(true);
+    this.world.time = (this.net.serverNow() - m.goAt) / 1000;
+    this.state = 'spectate'; this.sound.stopMusic(); this.sound.startMusic();
+    this.hud.setSpectate(true, 'צופה במרוץ. תיכנס למרוץ הבא'); this.pickSpectate(true); this.keepAwake();
+  }
+
   onRaceStartNet(m) {
-    if (m.spectator) { if (this.state === 'lobby') this.showToast('מרוץ מתנהל, תיכנס למרוץ הבא', 3000); return; }
-    this.lobbyUI.hide();
+    if (m.spectator) { this.pendingSpectate = m; if (this.state === 'lobby') { this.showToast('מרוץ מתנהל. אפשר לצפות בו, ותיכנס למרוץ הבא', 3500); if (this.roomMsg) this.lobbyUI.room(this.roomMsg); } return; }
+    if (this.raceStartNet?.raceNo === m.raceNo && this.world?.online && ['countdown', 'racing', 'spectate'].includes(this.state)) return;   // we reconnected in the middle of this race
+    this.pendingSpectate = null; this.spectating = false;
+    this.lobbyUI.hide(); this.emojiBar(true);
     this.raceSeed = m.seed; this.raceStartNet = m;
     this.roomRoster = m.roster; this.hostsBots = m.hostId === this.net.you;
     this.myCarId = m.roster.find((c) => c.playerId === this.net.you)?.carId ?? 0;
@@ -367,8 +397,8 @@ export class Game {
     this.last = now;
     if (!this.paused) {
       if (this.state === 'countdown') this.updateCountdown(dt);
-      if (this.net && this.world.online && (this.state === 'racing' || this.state === 'spectate')) this.sendNetState(dt);
-      if (this.net && this.state === 'racing') { this.progAcc += dt; if (this.progAcc >= 1) { this.progAcc = 0; this.net.send({ t: 'prog', s: this.world.player.s }); } }
+      if (this.net && this.world.online && !this.spectating && (this.state === 'racing' || this.state === 'spectate')) this.sendNetState(dt);
+      if (this.net && this.state === 'racing' && !this.spectating) { this.progAcc += dt; if (this.progAcc >= 1) { this.progAcc = 0; this.net.send({ t: 'prog', s: this.world.player.s }); } }
       if (this.state === 'racing' || this.state === 'spectate') { const ts = performance.now(); this.runSim(dt); this.simMs += (performance.now() - ts - this.simMs) * 0.05; }
       if (this.goTextT > 0) { this.goTextT -= dt; if (this.goTextT <= 0) this.hud.hideCountdown(); }
     }
@@ -424,7 +454,7 @@ export class Game {
       const sm = this.remotes.get(car.id)?.sample(t);
       if (!sm) continue;
       car.s = sm.s; car.d = sm.d; car.h = sm.h; car.yaw = sm.yaw; car.speed = sm.speed; car.steer = sm.steer; car.state = sm.state;
-      car.hit.kind = sm.hitKind; car.hit.t = sm.hitT; car.vd = 0; car.vy = 0;
+      car.hit.kind = sm.hitKind; car.hit.t = sm.hitT; car.vd = 0; car.vy = 0; car.stale = sm.stale;
       car.turboT = sm.fx & FX.turbo ? 1 : 0; car.shieldT = sm.fx & FX.shield ? 1 : 0; car.invulnT = sm.fx & FX.invuln ? 1 : 0;
       if (sm.state === 'finished' && car.finishTime == null) { car.finishTime = sm.t; w.finishOrder.push(car); car.place = w.finishOrder.length; }
     }
@@ -442,6 +472,14 @@ export class Game {
       if (list.length) this.net.send({ t: 'bots', a: list });
     }
   }
+
+  sendEmoji(e) {
+    if (!this.net || performance.now() < (this.emojiReadyAt || 0)) return;
+    this.emojiReadyAt = performance.now() + 2600;
+    this.net.send({ t: 'emoji', e });
+    this.emojiBar(false); clearTimeout(this.emojiT); this.emojiT = setTimeout(() => this.emojiBar(this.state === 'racing' || this.state === 'countdown'), 2700);
+  }
+  emojiBar(on) { this.lobbyUI.showEmojiBar(on && !!this.net && !this.spectating); }
 
   /** Online: announce what this phone's cars did (items used, entities that hit one of them). */
   flushNetOut(w) {
@@ -647,6 +685,17 @@ export class Game {
   }
 
 
+  /** Emoji speech bubble above a car (online): a sprite that floats for about 2 seconds. */
+  updateBubble(car, v, dt) {
+    if (!(car.bubbleT > 0)) { if (v.bubble) v.bubble.visible = false; return; }
+    car.bubbleT -= dt;
+    if (!v.bubble) { v.bubble = new THREE.Sprite(new THREE.SpriteMaterial({ transparent: true, depthTest: false, fog: false })); v.bubble.scale.set(2.2, 2.2, 1); v.bubble.renderOrder = 5; v.root.add(v.bubble); }
+    if (v.bubbleE !== car.bubbleE) { v.bubbleE = car.bubbleE; v.bubble.material.map = emojiTexture(car.bubbleE); v.bubble.material.needsUpdate = true; }
+    v.bubble.visible = car.bubbleT > 0;
+    v.bubble.position.set(0, 3.6 + Math.min(0.8, (2.2 - car.bubbleT) * 0.5), 0);
+    v.bubble.material.opacity = Math.min(1, car.bubbleT * 2);
+  }
+
   updateViews(dt) {
     const T = this.track;
     this.world.cars.forEach((car, i) => {
@@ -680,6 +729,8 @@ export class Game {
         visible = t < 3.5;
       } else if (v.root.scale.y !== 1) v.root.scale.set(1, 1, 1);
       if (car.invulnT > 0) visible = visible && Math.floor(car.t * 10) % 2 === 0;
+      if (car.stale) visible = visible && Math.floor(car.t * 3) % 2 === 0;       // that phone stopped sending: the car blinks until it is back
+      this.updateBubble(car, v, dt);
       v.root.visible = visible;
       // blob shadow stays on the ground (below jumps), fades with height
       const groundY = this.tmpWorld.y - car.h + gh;

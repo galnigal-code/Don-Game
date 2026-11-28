@@ -37,6 +37,7 @@ export function createLobbyScreens(root, h) {
       <div class="row">
         <button class="big" id="btn-lobby-start" hidden>התחל עכשיו</button>
         <button class="big" id="btn-lobby-calib" hidden>כייל והתחל</button>
+        <button class="big" id="btn-lobby-watch" hidden>צפה במרוץ</button>
       </div>
       <div class="row"><button class="ghost" id="btn-lobby-recal">כייל מחדש</button><button class="ghost" id="btn-lobby-leave">צא מהחדר</button></div>
       <div id="lobby-last" hidden></div>
@@ -71,6 +72,7 @@ export function createLobbyScreens(root, h) {
   });
   $('btn-copy').addEventListener('click', async () => { try { await navigator.clipboard.writeText(shareUrl); h.toast('הקישור הועתק'); } catch { h.toast(shareUrl, 4000); } });
   $('btn-lobby-start').addEventListener('click', () => h.onStartNow());
+  $('btn-lobby-watch').addEventListener('click', () => h.onWatch());
   $('btn-lobby-calib').addEventListener('click', () => h.onCalibrate());
   $('btn-lobby-recal').addEventListener('click', () => h.onCalibrate());
   $('btn-lobby-leave').addEventListener('click', () => h.onLeave());
@@ -86,6 +88,7 @@ export function createLobbyScreens(root, h) {
     $('btn-lobby-start').hidden = !(isHost && ready && r.phase === 'lobby');
     $('btn-lobby-calib').hidden = !(!ready && r.phase === 'lobby');
     $('btn-lobby-recal').hidden = !ready;
+    $('btn-lobby-watch').hidden = !(r.phase === 'racing' && !mine?.inRace && h.canWatch());
     const tbl = r.scores.filter((s) => s.races > 0);
     $('lobby-board').hidden = !tbl.length;
     $('lobby-board').innerHTML = tbl.length ? `<div class="sub">טבלת החדר</div>` + tbl.map((s, i) => `<div class="pl"><span class="n">${i + 1}</span><i style="background:${hex(s.color)}"></i><span class="nm">${esc(s.name)}</span><span class="st">${s.points} נק׳</span></div>`).join('') : '';

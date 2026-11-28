@@ -18,7 +18,7 @@ Mobile-browser 3D racing game prototype (Three.js + Vite). Tilt-to-steer, auto-f
 - M2 requires the user to test tilt on a real Android phone. Stop and ask them before moving past M2.
 - **The giant roller (V2-C) was built and then CANCELLED by the user on 2026-11-26** (not visible with a chase camera). It is shelved: `CONFIG.roller.ENABLED = false`, code and tests kept, `?roller=1` brings it back for testing. Do NOT enable it by default. The rule is back to: no car can ever be eliminated.
 - V2-D (realism) is built and deployed.
-- **Version 3 (planned, awaiting approval): play with friends.** `docs/PLAN_V3.md` + `docs/TECH_SPEC_V3.md`. Cloudflare Workers + Durable Objects room server (`server/`), pure room logic in `src/net/room/`, each phone owns its car, host owns bots, server arbitrates boxes/finish/scores. Build V3-A -> V3-D. "Race vs computer" must stay unchanged.
+- **Version 3 (built V3-A..V3-D, awaiting the user's real-phone test): play with friends.** `docs/PLAN_V3.md` + `docs/TECH_SPEC_V3.md`. Cloudflare Workers + Durable Objects room server (`server/`), pure room logic in `src/net/room/`, each phone owns its car, host owns bots, server arbitrates boxes/finish/scores. Build V3-A -> V3-D. "Race vs computer" must stay unchanged.
 - Communicate with the user in Hebrew.
 
 ## Commands
