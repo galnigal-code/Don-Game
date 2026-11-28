@@ -500,7 +500,7 @@ export class Game {
       if (!sm) continue;
       car.s = sm.s; car.d = sm.d; car.h = sm.h; car.yaw = sm.yaw; car.speed = sm.speed; car.steer = sm.steer; car.state = sm.state;
       car.hit.kind = sm.hitKind; car.hit.t = sm.hitT; car.vd = 0; car.vy = 0; car.stale = sm.stale; car.route = sm.route || 0;
-      car.turboT = sm.fx & FX.turbo ? 1 : 0; car.shieldT = sm.fx & FX.shield ? 1 : 0; car.invulnT = sm.fx & FX.invuln ? 1 : 0;
+      car.turboT = sm.fx & FX.turbo ? 1 : 0; car.shieldT = sm.fx & FX.shield ? 1 : 0; car.invulnT = sm.fx & FX.invuln ? 1 : 0; car.padT = sm.fx & FX.pad ? 1 : 0;
       if (sm.state === 'finished' && car.finishTime == null) { car.finishTime = sm.t; w.finishOrder.push(car); car.place = w.finishOrder.length; }
     }
   }
@@ -631,7 +631,7 @@ export class Game {
     const sd = this.sound;
     if (!sd.ctx) return;
     const racing = this.state === 'racing' || this.state === 'spectate' || this.state === 'countdown';
-    sd.engine(target.speed, target.turboT > 0, racing && target.state === 'driving');
+    sd.engine(target.speed, target.turboT > 0 || target.padT > 0, racing && target.state === 'driving');
     const prev = this.prevPlayer || (this.prevPlayer = {});
     if (player.turboT > 0 && !prev.turbo) sd.turbo();
     if (player.state === 'falling' && prev.state !== 'falling') sd.fall();
@@ -646,7 +646,7 @@ export class Game {
   /** Dust from the rear wheels (more on sand / with turbo) and turbo flames from the exhausts. */
   emitCarParticles(car, v, dt) {
     const onGround = car.state === 'driving' && car.h < 0.3 + this.track.groundHeight(car.s, car.route);
-    const turbo = car.turboT > 0 || car.boostT > 0;
+    const turbo = car.turboT > 0 || car.boostT > 0 || car.padT > 0;
     for (const f of v.flames) f.visible = turbo && car.state === 'driving';
     if (turbo && car.state === 'driving') for (const f of v.flames) f.scale.set(1, 0.7 + Math.random() * 0.6, 1);
     if (!onGround || car.speed < 6) return;
@@ -697,6 +697,11 @@ export class Game {
         for (let q = 0; q < 14; q++) this.particles.emit(tmp.x, tmp.y, tmp.z, (Math.random() - 0.5) * 12, 2 + Math.random() * 7, (Math.random() - 0.5) * 12,
           { size: 0.5 + Math.random() * 0.6, life: 0.6 + Math.random() * 0.5, color: q % 3 === 0 ? 0x2a2a2a : q % 3 === 1 ? 0xff8a1f : 0xc9a36b, alpha: 0.85, grow: 1.4, drag: 1.2, up: -9 });
         if (Math.abs(e.s - target.s) < 25) this.rig.shake(0.18);
+      } else if (e.type === 'pad') {
+        const c = this.world.cars.find((x) => x.id === e.carId);
+        this.sound.at(dist(e.s), (v) => this.sound.pad(v));
+        T.toWorld(e.s, e.d, 0.6, tmp, e.route || 0); this.effects.sparkle(tmp.x, tmp.y, tmp.z);
+        if (c === p) { this.rig.shake(0.1); navigator.vibrate?.(30); }
       } else if (e.type === 'collide') {
         T.toWorld(e.s, e.d, 0.6, tmp, e.route || 0);
         const n = 6 + Math.min(8, Math.round(e.strength * 0.5));
@@ -804,7 +809,7 @@ export class Game {
     const cw = this.carWorld[w.cars.indexOf(target)];
     this.tmpPos.set(cw.x, cw.y, cw.z);
     if (player.wallHit) { if (target === player) { this.rig.shake(0.12); this.sound.bump(); } player.wallHit = false; }
-    this.rig.update(dt, this.tmpPos, cw.heading, target.turboT > 0);
+    this.rig.update(dt, this.tmpPos, cw.heading, target.turboT > 0 || target.padT > 0);
 
     this.handleEvents(target);
     this.entityViews.update(performance.now() / 1000, w);

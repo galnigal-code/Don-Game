@@ -90,6 +90,7 @@ export class Sound {
   /* ---------- effects ---------- */
   beep(final = false) { this.tone(final ? 880 : 440, final ? 0.5 : 0.18, { type: 'square', vol: 0.22 }); }
   turbo() { this.noise(0.9, { vol: 0.35, type: 'bandpass', from: 500, to: 3200, q: 0.8 }); this.tone(180, 0.5, { type: 'sawtooth', vol: 0.12, slideTo: 520 }); }
+  pad() { this.noise(0.5, { vol: 0.3, type: 'bandpass', from: 800, to: 4500, q: 0.9 }); this.tone(260, 0.35, { type: 'sawtooth', vol: 0.12, slideTo: 880 }); this.tone(1320, 0.18, { type: 'triangle', vol: 0.1, delay: 0.1 }); }
   pickup() { this.tone(660, 0.1, { vol: 0.16 }); this.tone(990, 0.16, { vol: 0.16, delay: 0.08 }); }
   roulette() { for (let i = 0; i < 6; i++) this.tone(500 + (i % 3) * 120, 0.05, { vol: 0.07, delay: i * 0.12, type: 'triangle' }); }
   ready() { this.tone(880, 0.08, { vol: 0.14, type: 'triangle' }); this.tone(1320, 0.14, { vol: 0.14, delay: 0.07, type: 'triangle' }); }

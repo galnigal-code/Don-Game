@@ -41,6 +41,7 @@ export function createMinimap(root, track) {
       b.beginPath(); br.samples.forEach((p, i) => { const [x, y] = map(p.px, p.pz); if (i) b.lineTo(x, y); else b.moveTo(x, y); });
       b.strokeStyle = br.kind === 'alley' ? 'rgba(255,255,255,.55)' : 'rgba(80,225,255,.95)'; b.lineWidth = px * (br.kind === 'alley' ? 0.014 : 0.018); b.stroke();
     }
+    for (const pd of track.pads || []) { if (pd.s >= track.lapLength && track.loop) continue; const q = track.sample(pd.s, {}, pd.route), [x, y] = map(q.px + q.rx * pd.d, q.pz + q.rz * pd.d); b.fillStyle = '#17c964'; b.fillRect(x - px * 0.012, y - px * 0.012, px * 0.024, px * 0.024); }
     // start (green tick) and finish (checkered square)
     const [sx, sy] = map(pts[0].x, pts[0].z); b.fillStyle = '#3ddc68'; b.beginPath(); b.arc(sx, sy, px * 0.03, 0, 7); b.fill();
     const [fx, fy] = map(pts[pts.length - 1].x, pts[pts.length - 1].z), q = px * 0.028;

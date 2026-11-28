@@ -11,7 +11,7 @@ export function createCar({ id = 0, name = 'Player', color = 0xd0201c, isPlayer 
     s, d, h: 0, vy: 0, yaw: 0, speed: 0, steer: 0,
     input: { steer: 0, turbo: false, item: false },
     prevTurboInput: false, turbosLeft: C.TURBO_MAX, turboRecharge: 0, turboT: 0, boostT: 0, rank: 0, vd: 0, bumpCd: {},
-    item: null, rouletteT: 0, prevItemInput: false, gunShotsLeft: 0, gunCooldown: 0, shieldT: 0,
+    padT: 0, item: null, rouletteT: 0, prevItemInput: false, gunShotsLeft: 0, gunCooldown: 0, shieldT: 0,
     hit: { kind: null, t: 0 }, gunSlow: 0,
     state: 'driving', // driving | falling | respawning | finished | eliminated (flattened by the roller)
     fallT: 0, respawnT: 0, invulnT: 0, lastCheckpointS: 0, stuckT: 0, wallCooldown: 0,
@@ -19,6 +19,16 @@ export function createCar({ id = 0, name = 'Player', color = 0xd0201c, isPlayer 
     respawns: 0, justRespawned: false, eliminatedAt: null, offroad: false, t: 0,
     finishTime: null, place: null,
   };
+}
+
+/** Driving over a boost pad (same route, inside its footprint): a burst of speed for CONFIG.pads.TIME seconds. */
+function touchPads(car, track) {
+  for (const p of track.pads) {
+    if (p.route !== car.route || Math.abs(car.s - p.s) > p.hlS || Math.abs(car.d - p.d) > p.hw) continue;
+    if (car.padT <= 0) car.padEvent = { route: car.route, s: car.s, d: car.d };      // the game turns it into a sound / effect (once per pad)
+    car.padT = CONFIG.pads.TIME;
+    return;
+  }
 }
 
 export function activateTurbo(car) {
@@ -71,6 +81,7 @@ export function stepCar(car, dt, track) {
     if (car.turboRecharge >= C.TURBO_RECHARGE) { car.turbosLeft++; car.turboRecharge = 0; }
   } else car.turboRecharge = 0;
   car.boostT = Math.max(0, car.boostT - dt);
+  car.padT = Math.max(0, car.padT - dt);
   for (const k in car.bumpCd) if ((car.bumpCd[k] -= dt) <= 0) delete car.bumpCd[k];
   car.rouletteT = Math.max(0, car.rouletteT - dt);
   car.shieldT = Math.max(0, car.shieldT - dt);
@@ -97,13 +108,15 @@ export function stepCar(car, dt, track) {
 
   // speed
   let target = finished ? 0 : C.CRUISE_SPEED;
-  if (car.turboT > 0) target *= C.TURBO_MULT;
+  // a boost pad is stronger than the turbo; the two never stack (the faster one counts)
+  const boostMult = Math.max(car.turboT > 0 ? C.TURBO_MULT : 1, car.padT > 0 ? CONFIG.pads.MULT : 1);
+  target *= boostMult;
   if (car.boostT > 0) target *= CONFIG.countdown.START_BOOST_MULT;
   if (car.offroad) target *= C.SAND_MULT;
   if (car.hit.kind) target *= C.HIT_SPEED_MULT[car.hit.kind];
   target *= 1 - car.gunSlow;
   if (input.speedMult) target *= input.speedMult;
-  const accel = car.turboT > 0 ? C.TURBO_ACCEL : C.ACCEL;
+  const accel = car.padT > 0 ? CONFIG.pads.ACCEL : car.turboT > 0 ? C.TURBO_ACCEL : C.ACCEL;
   car.speed += clamp(target - car.speed, -(car.hit.kind ? C.HIT_DECEL : C.DECEL) * dt, accel * dt);
 
   // steering
@@ -134,6 +147,7 @@ export function stepCar(car, dt, track) {
   car.s += ds * (car.route ? track.warp(car.route) : 1); car.d += dd;      // on a branch s runs at the branch's pace (shortcut: faster)
   if (track.branches.length && track.updateRoute(car, prevS)) { track.sample(car.s, S, car.route); hw = sm.halfWidth; }   // the route changed: the barriers below are the new road's
   if (car.s > track.maxS) { car.s = track.maxS; car.speed = 0; }
+  if (track.pads.length && car.state === 'driving' && car.h < 0.9) touchPads(car, track);
 
   // vertical: follow the ground (ramps), launch at the end of a ramp, fly, land
   if (!air && !finished) {

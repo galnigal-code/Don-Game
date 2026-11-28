@@ -146,6 +146,7 @@ export function createWorld({ track, seed = 1, bots = 3, roller = CONFIG.roller.
           car.place = world.finishOrder.length;
         }
       }
+      for (const car of cars) if (car.padEvent) { world.events.push({ type: 'pad', carId: car.id, ...car.padEvent }); car.padEvent = null; }
       for (const car of cars) if (car.owner !== 'remote' && car.justRespawned) { car.justRespawned = false; placeAheadOfRoller(world, car); }
       stepRoller(world, dt);
       stepEntities(world, dt);

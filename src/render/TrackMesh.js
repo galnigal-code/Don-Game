@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { CONFIG } from '../config.js';
 import { applySurface } from './textures.js';
 import { buildBranchMeshes } from './BranchMesh.js';
+import { buildPadMesh } from './PadMesh.js';
 
 function roadTexture() {
   const c = document.createElement('canvas');
@@ -110,6 +111,7 @@ function buildCityRoad(track) {
   const mats = { road, mark: markings, kl: kerb, kr: kerb, wl: walk, wr: walk };
   for (const k in rows) { const m = rows[k].mesh(mats[k]); if (m) group.add(m); }
   buildBranchMeshes(track, group, road);
+  const pads = buildPadMesh(track); if (pads) group.add(pads);
 
   // start / finish gate (a loop has one line: the start and the finish are the same place)
   const sm = track.sample(0), hw = sm.halfWidth, holder = new THREE.Group();

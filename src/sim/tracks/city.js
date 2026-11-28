@@ -43,7 +43,7 @@ function cornerCut(m, sa, sb, dIn, R) {
 }
 const alley = (id, sa, sb, dIn, R) => ({
   id, kind: 'alley', hw: 5.5, sa, sb, end: 'merge', entry: [dIn - 2.4, dIn + 2.4], exact: true,
-  pads: [{ u: 0.5, d: 0 }],
+  pads: [{ u: 0.24, d: 0 }],                  // just after the first bend: the long straight that follows lets the boost wear off before the second bend
   path: (m) => cornerCut(m, sa, sb, dIn, R),
 });
 
@@ -62,18 +62,18 @@ function lane(m, sa, sb, d0, legs, rises, step = 10) {
 }
 
 export const BRANCHES = [
-  alley('alleyA', 540, 840, 6.2, 50),         // cuts the corner after the right-hand side
-  alley('alleyB', 1520, 1820, 6.2, 50),        // cuts the top-left corner
+  alley('alleyA', 530, 850, 6.2, 62),         // cuts the corner after the right-hand side
+  alley('alleyB', 1510, 1830, 6.2, 62),        // cuts the top-left corner
   { // long elevated track on the inside of the loop: leaves the road to the right, climbs OFF the road, comes back down
     id: 'sky', kind: 'elevated', hw: 5.5, sa: 110, sb: 400, end: 'merge', entry: [3, 9], exact: true,
     boxes: [{ u: 0.42, d: -2.5 }, { u: 0.42, d: 2.5 }, { u: 0.5, d: 0 }, { u: 0.58, d: -2.5 }, { u: 0.58, d: 2.5 }],
-    pads: [{ u: 0.8, d: 0 }],
+    pads: [{ u: 0.1, d: 0 }],       // early: the boost has worn off before the bend that follows (R~50 holds 45 m/s)
     path: (m) => lane(m, 110, 400, 6, [{ from: 124, to: 214, d: 18 }, { from: 296, to: 386, d: 6 }], [{ from: 166, to: 270, y: 8 }, { from: 292, to: 386, y: 0 }]),
   },
   { // short floating track on the outside, ends in an open lip: the car jumps back onto the road
     id: 'neo', kind: 'neo', hw: 5.5, sa: 900, sb: 1140, end: 'jump', entry: [-9, -3], jumpVy: 3, exact: true,
     boxes: [{ u: 0.5, d: -2.5 }, { u: 0.5, d: 2.5 }, { u: 0.58, d: 0 }],
-    pads: [{ u: 0.7, d: 0 }],
+    pads: [{ u: 0.5, d: 0 }],
     path: (m) => lane(m, 900, 1140, -6, [{ from: 914, to: 1000, d: -25 }, { from: 1030, to: 1126, d: -3 }], [{ from: 950, to: 1050, y: 7 }]),
   },
   { // the secret door: a garage door in a building on the outside, a dark climbing tunnel, a floating track out of the top floor
@@ -87,7 +87,10 @@ export const BRANCHES = [
 
 export const city = {
   id: 'city', name: 'עיר בשקיעה', style: 'city', loop: true, laps: 2,
-  points: CITY_POINTS, segments: [], ramps: [], branches: BRANCHES, obstacles: [], heightAt: () => 0,
+  points: CITY_POINTS, segments: [], ramps: [], branches: BRANCHES,
+  // boost pads on the main road (s along the lap, d lateral): three of them; every elevated track and every alley has one more
+  mainPads: [{ s: 62, d: -4 }, { s: 455, d: -4 }, { s: 1020, d: 4 }],        // each is followed by 140+ m before a tight bend: a boosted car (57 m/s) needs that to slow down to what the steering holds (45 m/s)
+  obstacles: [], heightAt: () => 0,
   leadIn: 40, runOut: 120,
   runoff: 1.6,           // the kerb strip: the car is held on the road side of it (no slowdown, see CONFIG.car.SAND_MULT)
 };

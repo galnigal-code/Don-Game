@@ -12,6 +12,8 @@ export const CONFIG = {
     RADIUS: 1.1, HALF_WIDTH: 0.95,   // body half-width: a car touching a wall has its SIDE at the wall, not its centre
   },
   track: { LENGTH_TARGET: 2900, HALF_WIDTH: 9, CANYON_HALF_WIDTH: 6, WALL_PUSH_COOLDOWN: 0.4, FALL_TIME: 0.8, SAND_EXTRA: 6, CHECKPOINT_EVERY: 80, SAMPLE_STEP: 1 },
+  // boost pads (V5-C): a green square with white arrows; a faster burst than the turbo for a couple of seconds (never stacked with it)
+  pads: { MULT: 1.8, TIME: 2, HALF_LEN: 4.5, HALF_W: 3, ACCEL: 45 },
   items: {
     BOX_RESPAWN: 3, ROULETTE_TIME: 0.8, SHIELD_TIME: 6,
     MISSILE_SPEED: 70, MISSILE_TURN: 12, BULLET_SPEED: 90, BULLET_RANGE: 120,

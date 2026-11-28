@@ -78,14 +78,14 @@ describe('racing on the city loop', () => {
     expect(car.respawns).toBe(0); expect(minSpeed).toBeGreaterThan(C.CRUISE_SPEED * 0.97); expect(edge).toBeLessThan(5);
   });
   for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
-    it(`seed ${seed}: 4 cars finish 2 laps, nobody falls or respawns, the winner takes 95-125 s`, () => {
+    it(`seed ${seed}: 4 cars finish 2 laps, nobody falls or respawns, the winner takes 80-125 s`, () => {
       const w = createWorld({ track: city, seed, bots: 3 }); const brain = createBrain(createRng(seed + 99), city); w.go(true);
       let walls = 0;
       for (let i = 0; i < 60 * 220 && !w.done; i++) { drivePlayerProxy(w.player, brain, w); w.step(1 / 60); for (const c of w.cars) if (c.wallHit) { walls++; c.wallHit = false; } }
       expect(w.done, 'race finished').toBe(true);
       expect(w.cars.every((c) => c.finishTime != null && c.respawns === 0)).toBe(true);
       const t = Math.min(...w.cars.map((c) => c.finishTime));
-      expect(t).toBeGreaterThan(95); expect(t).toBeLessThan(125);
+      expect(t).toBeGreaterThan(80); expect(t).toBeLessThan(125);
       expect(walls).toBeLessThan(40);                      // bumping a wall is rare (a bend never forces it); the narrow alleys are where it happens
     });
   }

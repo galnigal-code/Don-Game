@@ -28,7 +28,7 @@ export function createBrain(rng, track, lane = null) {
     skill: 0.975 + rng() * 0.02,                     // 97.5-99.5 % of the player pace (rubber band closes the gap)
     nextTurboAt: 0.08 * L + rng() * 250,             // next spot where this bot wants to use a turbo
     startBoost: rng() < 0.4,
-    rng, wants: new Map(), smart: false,       // which branches this bot takes (decided per lap); a few bots know about the secret door
+    rng, wants: new Map(), padWants: new Map(), smart: false,       // which branches this bot takes (decided per lap); a few bots know about the secret door
     dodge: new Map(),                 // entity id -> will this bot avoid it? (decided once, DODGE_SUCCESS)
     aggression: 0.2 + rng() * 0.5,    // how often it leans into a car next to it
     nudgeUntil: 0, nudgeCar: null, overtakeSkill: new Map(),
@@ -57,7 +57,7 @@ export function driveBot(car, brain, world) {
   target = nudge(car, brain, world, target, here, hw);
   const limL = ahead.edgeLeft === 'cliff' ? hw - 3.5 : hw - 2;
   const limR = ahead.edgeRight === 'cliff' ? hw - 3.5 : hw - 2;
-  target = clamp(branchPlan(car, brain, world, target), -limL, limR);
+  target = clamp(branchPlan(car, brain, world, padPlan(car, brain, world, target)), -limL, limR);
   car.input.steer = steerTowards(car, track, target, here);
 
   driveItems(car, brain, world);
@@ -137,6 +137,22 @@ export function branchPlan(car, brain, world, target) {
   return target;
 }
 
+/** Aim at the next boost pad ahead when it can be reached (most bots take most pads). */
+export function padPlan(car, brain, world, target) {
+  const pads = world.track.pads;
+  if (!pads.length || car.state !== 'driving') return target;
+  let best = null;
+  for (const p of pads) {
+    if (p.route !== car.route || p.s < car.s + 6 || p.s > car.s + 80) continue;
+    if (Math.abs(p.d - car.d) > (p.s - car.s) * 0.35 + 2) continue;       // too far to the side to steer there in time
+    if (!best || p.s < best.s) best = p;
+  }
+  if (!best) return target;
+  let want = brain.padWants.get(best.id);
+  if (want === undefined) { want = brain.rng() < 0.85; brain.padWants.set(best.id, want); }
+  return want ? best.d : target;
+}
+
 /** Aim at an item box when empty-handed, steer around traps (most of the time). */
 export function avoidAndCollect(car, brain, world, target) {
   if (!car.item && car.rouletteT <= 0) {
@@ -192,7 +208,7 @@ export function driveItems(car, brain, world) {
 
 /** A sensible human-like driver for the player (?autopilot=1, balance tests): dodges, grabs boxes, uses items. */
 export function drivePlayerProxy(car, brain, world, { turbo = true } = {}) {
-  driveSimple(car, world.track, branchPlan(car, brain, world, avoidAndCollect(car, brain, world, 0)));
+  driveSimple(car, world.track, branchPlan(car, brain, world, padPlan(car, brain, world, avoidAndCollect(car, brain, world, 0))));
   driveItems(car, brain, world);
   if (turbo) driveTurbo(car, brain, world, true); else car.input.turbo = false;
 }

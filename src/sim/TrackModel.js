@@ -243,7 +243,7 @@ export function createTrack(arg, segmentsArg, rampsArg) {
       const first = pts[0], last = pts[pts.length - 1], mb = sampleMain(bd.sb, {});
       branches.push({
         index: bi + 1, id: bd.id, kind: bd.kind, sa: bd.sa, sb: bd.sb, hw: bd.hw, end: bd.end, entry: bd.entry, boxes: bd.boxes || [], pads: bd.pads || [], building: bd.building || null,
-        length: total, warp: (bd.sb - bd.sa) / total, n: nb, samples: bs, step: total / (nb - 1),
+        bank: bd.kind === 'alley' ? 1 : 0.6, length: total, warp: (bd.sb - bd.sa) / total, n: nb, samples: bs, step: total / (nb - 1),
         entryCenter: latOf(first, bd.sa), exitD: latOf(last, bd.sb), exitH: bd.end === 'jump' ? last.y - mb.py : 0, jumpVy: bd.jumpVy ?? 3,
       });
     });
@@ -259,14 +259,21 @@ export function createTrack(arg, segmentsArg, rampsArg) {
     out.tx = tx / tl; out.ty = ty / tl; out.tz = tz / tl;
     const rx = lerp(A.rx, B.rx), rz = lerp(A.rz, B.rz), rl = Math.hypot(rx, rz) || 1; out.rx = rx / rl; out.rz = rz / rl;
     out.heading = lerp(A.heading, B.heading) + lap * loopTurn;
-    out.curvature = lerp(A.curvature, B.curvature) / br.step;
+    out.curvature = lerp(A.curvature, B.curvature) / br.step * br.bank;       // banked decks: the sideways push in a bend is smaller than on a flat road
     out.halfWidth = br.hw; out.edgeLeft = 'wall'; out.edgeRight = 'wall'; out.sandLimL = br.hw + 1; out.sandLimR = br.hw + 1;
     return out;
   };
 
+  // boost pads, unrolled over every lap: main-road pads {s, d} and branch pads {u along the branch, d}
+  const P = CONFIG.pads, pads = [];
+  for (let lap = 0; lap < laps; lap++) {
+    for (const mp of def.mainPads || []) pads.push({ id: pads.length, route: 0, s: mp.s + lap * lapLength, d: mp.d, hlS: P.HALF_LEN, hw: P.HALF_W });
+    for (const br of branches) for (const bp of br.pads) pads.push({ id: pads.length, route: br.index, s: br.sa + bp.u * (br.sb - br.sa) + lap * lapLength, d: bp.d, hlS: P.HALF_LEN * br.warp, hw: P.HALF_W });
+  }
+
   const track = {
     id: def.id, name: def.name, style: def.style, loop, laps, lapLength, runoff: SE, obstacles: def.obstacles || [],
-    samples, minS, maxS, finishS, step: STEP, headingTurn: loopTurn, branches,
+    samples, minS, maxS, finishS, step: STEP, headingTurn: loopTurn, branches, pads,
     length: finishS, // race length (start line -> finish line)
     ramps, allRamps, gaps: ramps.filter((r) => r.gap).map((r) => r.gap),
     /** 1-based lap of position s (1 for a non-loop track). */
