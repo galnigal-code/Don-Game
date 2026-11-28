@@ -9,13 +9,14 @@ const base = process.argv[2] || 'http://localhost:4173/Don-Game/';
 const problems = [];
 const ok = (cond, text) => { console.log((cond ? 'ok   ' : 'FAIL ') + text); if (!cond) problems.push(text); };
 
-const srv = await startDevServer({ port: 8799, delayMs: 120, lobbyTimerMs: 4000, quiet: true });
+const srv = await startDevServer({ port: 8799, delayMs: 120, lobbyTimerMs: 15000, quiet: true });
 const server = 'http://localhost:8799';
 const browser = await chromium.launch({ args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader'] });
 const pages = [];
 async function newPlayer(name, url, { saved = false } = {}) {
   const ctx = await browser.newContext({ viewport: { width: 640, height: 360 } });
   if (saved) await ctx.addInitScript(() => localStorage.setItem('dongame.dir', JSON.stringify({ v: 1, invert: false, byAngle: {} })));   // calibrated on an earlier visit
+  ctx.setDefaultNavigationTimeout(120000); ctx.setDefaultTimeout(60000);
   const page = await ctx.newPage();
   const errs = []; page.on('pageerror', (e) => errs.push(e.message)); page.on('console', (m) => { if (m.type() === 'error' && !/GPU stall|favicon|Failed to load resource/.test(m.text())) errs.push(m.text()); });
   await page.goto(url);

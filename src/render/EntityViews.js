@@ -75,7 +75,7 @@ function makeBullet() {
 }
 const MAKERS = { mine: makeMine, rock: makeRock, oil: makeOil, barrel: makeBarrel, missile: makeMissile, bullet: makeBullet };
 
-function T_place(v, s, d, h) { v.track.toWorld(s, d, h, v.tmp); }
+function T_place(v, s, d, h, route = 0) { v.track.toWorld(s, d, h, v.tmp, route); }
 
 export class EntityViews {
   constructor(scene, track) {
@@ -99,10 +99,10 @@ export class EntityViews {
     this.group.add(this.boxMesh);
   }
 
-  place(obj, s, d, h, withPitch = true) {
+  place(obj, s, d, h, withPitch = true, route = 0) {
     const T = this.track;
-    const sm = T.sample(s, this.smp);
-    T.toWorld(s, d, h, this.tmp);
+    const sm = T.sample(s, this.smp, route);
+    T.toWorld(s, d, h, this.tmp, route);
     obj.position.set(this.tmp.x, this.tmp.y, this.tmp.z);
     obj.rotation.set(withPitch ? Math.atan2(sm.ty, Math.hypot(sm.tx, sm.tz)) : 0, -sm.heading, 0, 'YXZ');
   }
@@ -112,7 +112,7 @@ export class EntityViews {
     this.boxes.forEach((box, i) => {
       if (box.t > 0) { d.position.set(0, -1000, 0); d.scale.setScalar(0.0001); d.rotation.set(0, 0, 0); }
       else {
-        T_place(this, box.s, box.d, 1.3 + Math.sin(time * 2.2 + box.id) * 0.18);
+        T_place(this, box.s, box.d, 1.3 + Math.sin(time * 2.2 + box.id) * 0.18, box.route || 0);
         d.position.set(this.tmp.x, this.tmp.y, this.tmp.z); d.scale.setScalar(1); d.rotation.set(0.35, time * 1.6 + box.id, 0);
       }
       d.updateMatrix(); this.boxMesh.setMatrixAt(i, d.matrix);
@@ -124,7 +124,7 @@ export class EntityViews {
       seen.add(e.id);
       let m = this.meshes.get(e.id);
       if (!m) { m = MAKERS[e.type](); this.meshes.set(e.id, m); this.group.add(m); }
-      this.place(m, e.s, e.d, 0);
+      this.place(m, e.s, e.d, 0, true, e.route || 0);
       if (e.type === 'mine') m.children[1].material.emissiveIntensity = 0.3 + 0.7 * (Math.sin(time * 12) > 0 ? 1 : 0);
       if (e.type === 'missile') m.children[0].userData.flame.scale.setScalar(0.8 + 0.4 * Math.sin(time * 40));
     }

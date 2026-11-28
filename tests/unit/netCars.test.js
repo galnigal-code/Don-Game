@@ -33,6 +33,27 @@ describe('car state packing', () => {
   });
 });
 
+describe('routes on the wire (V5-B)', () => {
+  it('a car on a branch keeps its route through pack/unpack, and the state array has 13 numbers', () => {
+    const car = createCar({ id: 2, s: 600 }); car.route = 4;
+    const a = packCar(car, 5), u = unpackCar(a);
+    expect(a.length).toBe(13); expect(u.route).toBe(4); expect(isCarArray(a)).toBe(true); expect(isCarArray(a.slice(0, 12))).toBe(false);
+    expect(unpackCar(packCar(createCar({ id: 1 }), 1)).route).toBe(0);
+  });
+  it('the interpolated remote car is on the route of the nearer sample', () => {
+    const tr = new RemoteTrack(); const st = (t, s, route) => ({ id: 1, t, s, d: 0, h: 0, yaw: 0, speed: 30, steer: 0, state: 'driving', fx: 0, hitKind: null, hitT: 0, route });
+    tr.push(st(0, 100, 0)); tr.push(st(1, 130, 3));
+    expect(tr.sample(0.3).route).toBe(0); expect(tr.sample(0.8).route).toBe(3);
+  });
+  it('a remote mine keeps the route it was dropped on', async () => {
+    const { createTrack } = await import('../../src/sim/TrackModel.js');
+    const city = createTrack('city');
+    const w = createWorld({ track: city, seed: 1, roster: roster4(2), myCarId: 1, hostsBots: false }); w.go();
+    expect(w.spawnRemoteItem({ k: 'mine', id: '0.1', c: 0, s: 600, d: 1, tg: -1, r: 2, rt: w.time }, w.time)).toBe(true);
+    expect(w.entities.find((e) => e.id === '0.1').route).toBe(2);
+  });
+});
+
 describe('interpolation of a remote car', () => {
   const st = (t, s, extra = {}) => ({ id: 1, t, s, d: 0, h: 0, yaw: 0, speed: 30, steer: 0, state: 'driving', fx: 0, hitKind: null, hitT: 0, ...extra });
   it('interpolates between samples and is smooth with ±50 ms jitter (streamed, like the real game)', () => {

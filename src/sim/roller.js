@@ -50,7 +50,7 @@ export function stepRoller(world, dt) {
       car.item = null; car.gunShotsLeft = 0;
       world.eliminated.push(car);
       world.stats.flattened = (world.stats.flattened || 0) + 1;
-      world.events.push({ type: 'flattened', carId: car.id, s: car.s, d: car.d });
+      world.events.push({ type: 'flattened', carId: car.id, s: car.s, d: car.d, route: car.route || 0 });
     }
   }
 }

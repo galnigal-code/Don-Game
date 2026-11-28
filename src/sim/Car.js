@@ -15,6 +15,7 @@ export function createCar({ id = 0, name = 'Player', color = 0xd0201c, isPlayer 
     hit: { kind: null, t: 0 }, gunSlow: 0,
     state: 'driving', // driving | falling | respawning | finished | eliminated (flattened by the roller)
     fallT: 0, respawnT: 0, invulnT: 0, lastCheckpointS: 0, stuckT: 0, wallCooldown: 0,
+    route: 0, routeLap: 0,          // 0 = the main road, 1.. = a branch (alley, elevated track, secret door)
     respawns: 0, justRespawned: false, eliminatedAt: null, offroad: false, t: 0,
     finishTime: null, place: null,
   };
@@ -28,7 +29,7 @@ export function activateTurbo(car) {
 }
 
 function respawn(car) {
-  car.s = car.lastCheckpointS; car.d = 0; car.yaw = 0; car.h = 0; car.vy = 0;
+  car.s = car.lastCheckpointS; car.d = 0; car.yaw = 0; car.h = 0; car.vy = 0; car.route = 0;
   car.speed = C.CRUISE_SPEED * 0.5; car.steer = 0; car.vd = 0; car.bumpCd = {};
   car.hit.kind = null; car.hit.t = 0; car.gunShotsLeft = 0;
   car.state = 'driving'; car.invulnT = C.INVULN_AFTER_RESPAWN;
@@ -86,12 +87,12 @@ export function stepCar(car, dt, track) {
   if (tp && !car.prevTurboInput && !finished) activateTurbo(car);
   car.prevTurboInput = tp;
 
-  const sm = track.sample(car.s, S);
-  const hw = sm.halfWidth;
+  const sm = track.sample(car.s, S, car.route);
+  let hw = sm.halfWidth;
   const side0 = car.d < 0 ? -1 : 1;
   const edge0 = side0 < 0 ? sm.edgeLeft : sm.edgeRight;
   car.offroad = edge0 === 'sand' && Math.abs(car.d) > hw;
-  const gh = track.groundHeight(car.s);
+  const gh = track.groundHeight(car.s, car.route);
   const air = car.h > gh + 0.001 || car.vy > 0;
 
   // speed
@@ -130,15 +131,16 @@ export function stepCar(car, dt, track) {
   car.vd *= Math.exp(-CONFIG.bump.LAT_DAMP * dt);
   if (Math.abs(car.vd) < 0.02) car.vd = 0;
   const prevS = car.s;
-  car.s += ds; car.d += dd;
+  car.s += ds * (car.route ? track.warp(car.route) : 1); car.d += dd;      // on a branch s runs at the branch's pace (shortcut: faster)
+  if (track.branches.length && track.updateRoute(car, prevS)) { track.sample(car.s, S, car.route); hw = sm.halfWidth; }   // the route changed: the barriers below are the new road's
   if (car.s > track.maxS) { car.s = track.maxS; car.speed = 0; }
 
   // vertical: follow the ground (ramps), launch at the end of a ramp, fly, land
   if (!air && !finished) {
-    const r = track.rampCrossed(prevS, car.s);
+    const r = car.route ? null : track.rampCrossed(prevS, car.s);
     if (r) { car.vy = r.launchVy; car.h = track.groundHeight(r.s); }
   }
-  const gh2 = track.groundHeight(car.s);
+  const gh2 = track.groundHeight(car.s, car.route);
   if (air || car.vy > 0) {
     car.vy -= C.GRAVITY * dt; car.h += car.vy * dt;
     if (car.h <= gh2 && car.vy <= 0) { car.h = gh2; car.vy = 0; }

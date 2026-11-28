@@ -40,7 +40,7 @@ export function applyHit(car, kind, world) {
 function nearestAhead(car, cars) {
   let best = null;
   for (const c of cars) {
-    if (c === car || c.state === 'finished' || c.state === 'eliminated' || c.s <= car.s) continue;
+    if (c === car || c.state === 'finished' || c.state === 'eliminated' || c.s <= car.s || (c.route || 0) !== (car.route || 0)) continue;
     if (!best || c.s < best.s) best = c;
   }
   return best;
@@ -51,7 +51,7 @@ export function useItem(car, world) {
   if (!car.item || car.rouletteT > 0 || car.state !== 'driving') return false;
   const it = car.item, I = CONFIG.items;
   car.item = null;
-  const base = { id: newEntityId(world, car), ownerId: car.id, age: 0, alive: true, travel: 0 };
+  const base = { id: newEntityId(world, car), ownerId: car.id, age: 0, alive: true, travel: 0, route: car.route || 0 };
   switch (it) {
     case 'mine': case 'oil': case 'barrel':
       world.entities.push({ ...base, type: it, s: car.s - I.DROP_BEHIND, d: car.d });
@@ -66,7 +66,7 @@ export function useItem(car, world) {
   }
   if (world.online && world.netOut && it !== 'gun' && it !== 'shield') {
     const e = world.entities[world.entities.length - 1];
-    world.netOut.push({ k: it, id: e.id, c: car.id, s: e.s, d: e.d, tg: e.targetId ?? -1 });
+    world.netOut.push({ k: it, id: e.id, c: car.id, s: e.s, d: e.d, tg: e.targetId ?? -1, r: e.route || 0 });
   }
   world.stats.uses++;
   world.events.push({ type: 'use', carId: car.id, item: it });
@@ -80,7 +80,7 @@ export function stepGun(car, world, dt) {
   car.gunCooldown -= dt;
   if (car.gunCooldown > 0) return;
   car.gunShotsLeft--; car.gunCooldown = CONFIG.items.GUN_INTERVAL;
-  world.entities.push({ id: newEntityId(world, car), type: 'bullet', ownerId: car.id, age: 0, alive: true, travel: 0, s: car.s + 2, d: car.d });
+  world.entities.push({ id: newEntityId(world, car), type: 'bullet', ownerId: car.id, age: 0, alive: true, travel: 0, route: car.route || 0, s: car.s + 2, d: car.d });
 }
 
 /** Item boxes: collect when driving through; the box respawns after a few seconds. (Layout: boxLayout.js) */
@@ -89,7 +89,7 @@ export function stepBoxes(world, dt) {
   for (const b of world.boxes) {
     if (b.t > 0) { b.t = Math.max(0, b.t - dt); continue; }
     for (const car of world.cars) {
-      if (car.owner === 'remote') continue;           // online: the box vanishes when the room confirms that car took it
+      if (car.owner === 'remote' || (car.route || 0) !== (b.route || 0)) continue;           // online: the box vanishes when the room confirms that car took it; a box belongs to one route
       if (car.state !== 'driving' || car.h > I.BOX_MAX_H) continue;
       if (Math.abs(b.s - car.s) >= I.BOX_REACH_S || Math.abs(b.d - car.d) >= I.BOX_REACH_D) continue;
       b.t = I.BOX_RESPAWN;

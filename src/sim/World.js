@@ -75,7 +75,7 @@ export function createWorld({ track, seed = 1, bots = 3, roller = CONFIG.roller.
       const owner = cars.find((c) => c.id === m.c);
       if (!owner || owner.owner !== 'remote' || world.entities.some((e) => e.id === m.id)) return false;
       const age = Math.max(0, Math.min(1, raceTime - (m.rt ?? raceTime)));
-      const e = { id: m.id, type: m.k, ownerId: m.c, age, alive: true, travel: 0, s: m.s, d: m.d };
+      const e = { id: m.id, type: m.k, ownerId: m.c, age, alive: true, travel: 0, s: m.s, d: m.d, route: m.r || 0 };
       if (m.k === 'missile') { e.targetId = m.tg >= 0 ? m.tg : null; e.s += CONFIG.items.MISSILE_SPEED * age; e.travel = CONFIG.items.MISSILE_SPEED * age; }
       world.entities.push(e);
       return true;
@@ -84,7 +84,7 @@ export function createWorld({ track, seed = 1, bots = 3, roller = CONFIG.roller.
     killEntity(id) {
       const e = world.entities.find((x) => x.id === id);
       if (!e || !e.alive) return false;
-      e.alive = false; world.events.push({ type: 'explosion', s: e.s, d: e.d, kind: e.type });
+      e.alive = false; world.events.push({ type: 'explosion', s: e.s, d: e.d, kind: e.type, route: e.route || 0 });
       return true;
     },
     /** Another phone's gun burst: this remote car shoots here as well. */

@@ -23,6 +23,7 @@ export function resolveCarCollisions(cars, ctx = {}) {
     for (let j = i + 1; j < cars.length; j++) {
       const b = cars[j];
       if (b.state !== 'driving') continue;
+      if ((a.route || 0) !== (b.route || 0)) continue;     // cars on different routes (road / alley / elevated track) never touch
       const aR = a.owner === 'remote', bR = b.owner === 'remote';
       if (aR && bR) continue;                       // two cars of other phones: their owners resolve it
       const ds = b.s - a.s, dd = b.d - a.d;
@@ -71,7 +72,7 @@ export function resolveCarCollisions(cars, ctx = {}) {
       }
       if (strength >= K.EVENT_MIN) {
         world.stats.bumps = (world.stats.bumps || 0) + 1;
-        world.events.push({ type: 'collide', a: a.id, b: b.id, strength, s: (a.s + b.s) / 2, d: (a.d + b.d) / 2, aSide: ny });
+        world.events.push({ type: 'collide', a: a.id, b: b.id, strength, s: (a.s + b.s) / 2, d: (a.d + b.d) / 2, aSide: ny, route: a.route || 0 });
       }
     }
   }

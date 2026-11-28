@@ -1,5 +1,5 @@
 // Wire protocol between the game (client) and the room server. JSON messages: { t: <type>, ... }.
-export const PROTOCOL_VERSION = 2;       // 2: the room has a track (V5)
+export const PROTOCOL_VERSION = 3;       // 2: the room has a track (V5-A); 3: cars have a route and items a route (V5-B)
 export const MAX_MESSAGE_BYTES = 1024;     // the biggest message is `bots` (3 cars, about 200 bytes)
 export const EMOJIS = ['😂', '🔥', '😡', '👋'];
 

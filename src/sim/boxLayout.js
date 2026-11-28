@@ -44,5 +44,9 @@ export function generateBoxes(track, rng, { obstacles = track.obstacles || [] } 
     for (const p of placed) boxes.push({ id: boxes.length, s: p.s, d: p.d, t: 0 });
     if (!placed.length) s -= uniform(B.GAP_MIN, B.GAP_MAX) * 0.6;       // the whole group was blocked: try again sooner
   }
+  // fixed boxes on the branches (elevated tracks, the secret route): rows at set places, repeated every lap
+  for (let lap = 0; lap < (track.laps || 1); lap++) for (const br of track.branches || []) for (const bx of br.boxes) {
+    boxes.push({ id: boxes.length, s: br.sa + bx.u * (br.sb - br.sa) + lap * track.lapLength, d: bx.d, route: br.index, t: 0 });
+  }
   return boxes;
 }

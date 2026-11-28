@@ -16,12 +16,12 @@ export function stepEntities(world, dt) {
     } else if (e.type === 'mine' || e.type === 'oil' || e.type === 'barrel') {
       if (e.age > I.LIFE[e.type]) e.alive = false;
     } else if (e.type === 'missile') {
-      const target = e.targetId != null ? cars.find((c) => c.id === e.targetId) : null;
+      const target = e.targetId != null ? cars.find((c) => c.id === e.targetId && (c.route || 0) === (e.route || 0)) : null;
       if (target && target.state === 'driving') e.d += clamp(target.d - e.d, -I.MISSILE_TURN * dt, I.MISSILE_TURN * dt);
       e.s += I.MISSILE_SPEED * dt; e.travel += I.MISSILE_SPEED * dt;
       const tracking = target && target.state === 'driving';
       if ((!tracking && e.travel > I.MISSILE_RANGE_NO_TARGET) || e.travel > I.MISSILE_RANGE_MAX || e.s > track.maxS) {
-        e.alive = false; world.events.push({ type: 'explosion', s: e.s, d: e.d, kind: 'missile' });
+        e.alive = false; world.events.push({ type: 'explosion', s: e.s, d: e.d, kind: 'missile', route: e.route || 0 });
       }
     } else if (e.type === 'bullet') {
       e.s += I.BULLET_SPEED * dt; e.travel += I.BULLET_SPEED * dt;
@@ -34,7 +34,7 @@ export function stepEntities(world, dt) {
     const A = CONFIG.race.COLLIDE_A + reach, B = CONFIG.race.COLLIDE_B + reach;
     for (const car of cars) {
       if (car.id === e.ownerId && (e.type === 'missile' || e.type === 'bullet' || e.age < I.OWN_DROP_IMMUNITY)) continue;
-      if (car.state !== 'driving' || car.owner === 'remote') continue;    // online: each phone only hits ITS cars
+      if (car.state !== 'driving' || car.owner === 'remote' || (car.route || 0) !== (e.route || 0)) continue;    // online: each phone only hits ITS cars
       const ds = (e.s - car.s) / A, dd = (e.d - car.d) / B;
       if (ds * ds + dd * dd >= 1) continue;
 
@@ -51,7 +51,7 @@ export function stepEntities(world, dt) {
       if (applyHit(car, kind, world)) {
         e.alive = false;
         if (world.online) world.netOut?.push({ k: 'ehit', e: e.id });
-        world.events.push({ type: 'explosion', s: e.s, d: e.d, kind: e.type });
+        world.events.push({ type: 'explosion', s: e.s, d: e.d, kind: e.type, route: e.route || 0 });
         break;
       }
     }

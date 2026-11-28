@@ -17,6 +17,8 @@ export function createMinimap(root, track) {
   root.appendChild(cv);
   const g = cv.getContext('2d');
   const pts = track.samples.filter((p) => p.s >= 0 && p.s <= track.finishS).map((p) => ({ x: p.px, z: p.pz }));
+  const fitPts = [...pts];
+  for (const br of track.branches || []) if (br.kind !== 'secret') for (const p of br.samples) fitPts.push({ x: p.px, z: p.pz });      // the map must fit the branches too
   let base = null, px = 0, map = null, acc = 1;
   const tmp = {};
 
@@ -26,13 +28,19 @@ export function createMinimap(root, track) {
     px = Math.round(css * dpr);
     if (cv.width === px && base) return;
     cv.width = cv.height = px;
-    map = fitTrack(pts, px, px * 0.1);
+    map = fitTrack(fitPts, px, px * 0.1);
     base = document.createElement('canvas'); base.width = base.height = px;
     const b = base.getContext('2d');
     b.lineJoin = b.lineCap = 'round';
     const path = () => { b.beginPath(); pts.forEach((p, i) => { const [x, y] = map(p.x, p.z); if (i) b.lineTo(x, y); else b.moveTo(x, y); }); };
     path(); b.strokeStyle = 'rgba(0,0,0,.55)'; b.lineWidth = px * 0.05; b.stroke();          // outline (readable on sand and sky)
     path(); b.strokeStyle = 'rgba(255,255,255,.9)'; b.lineWidth = px * 0.025; b.stroke();
+    // the branches: alleys and elevated tracks (the secret door is NOT on the map)
+    for (const br of track.branches || []) {
+      if (br.kind === 'secret') continue;
+      b.beginPath(); br.samples.forEach((p, i) => { const [x, y] = map(p.px, p.pz); if (i) b.lineTo(x, y); else b.moveTo(x, y); });
+      b.strokeStyle = br.kind === 'alley' ? 'rgba(255,255,255,.55)' : 'rgba(80,225,255,.95)'; b.lineWidth = px * (br.kind === 'alley' ? 0.014 : 0.018); b.stroke();
+    }
     // start (green tick) and finish (checkered square)
     const [sx, sy] = map(pts[0].x, pts[0].z); b.fillStyle = '#3ddc68'; b.beginPath(); b.arc(sx, sy, px * 0.03, 0, 7); b.fill();
     const [fx, fy] = map(pts[pts.length - 1].x, pts[pts.length - 1].z), q = px * 0.028;
@@ -51,7 +59,7 @@ export function createMinimap(root, track) {
       const order = [...cars].sort((a, b) => (a.id === meId) - (b.id === meId));       // mine on top
       for (const c of order) {
         if (c.state === 'respawning') continue;
-        const sm = track.sample(Math.min(track.finishS, Math.max(0, c.s)), tmp);
+        const sm = track.sample(Math.min(track.finishS, Math.max(0, c.s)), tmp, c.route || 0);
         const [x, y] = map(sm.px + sm.rx * c.d, sm.pz + sm.rz * c.d);
         const me = c.id === meId, watch = c.id === watchId;
         g.beginPath(); g.arc(x, y, me ? r * 1.45 : r, 0, 7); g.fillStyle = hex(c.color); g.fill();

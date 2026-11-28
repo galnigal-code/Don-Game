@@ -499,7 +499,7 @@ export class Game {
       const sm = this.remotes.get(car.id)?.sample(t);
       if (!sm) continue;
       car.s = sm.s; car.d = sm.d; car.h = sm.h; car.yaw = sm.yaw; car.speed = sm.speed; car.steer = sm.steer; car.state = sm.state;
-      car.hit.kind = sm.hitKind; car.hit.t = sm.hitT; car.vd = 0; car.vy = 0; car.stale = sm.stale;
+      car.hit.kind = sm.hitKind; car.hit.t = sm.hitT; car.vd = 0; car.vy = 0; car.stale = sm.stale; car.route = sm.route || 0;
       car.turboT = sm.fx & FX.turbo ? 1 : 0; car.shieldT = sm.fx & FX.shield ? 1 : 0; car.invulnT = sm.fx & FX.invuln ? 1 : 0;
       if (sm.state === 'finished' && car.finishTime == null) { car.finishTime = sm.t; w.finishOrder.push(car); car.place = w.finishOrder.length; }
     }
@@ -636,7 +636,7 @@ export class Game {
     if (player.turboT > 0 && !prev.turbo) sd.turbo();
     if (player.state === 'falling' && prev.state !== 'falling') sd.fall();
     if (player.state === 'driving' && prev.state === 'respawning') sd.respawn();
-    const air = player.h > this.track.groundHeight(player.s) + 0.4;
+    const air = player.h > this.track.groundHeight(player.s, player.route) + 0.4;
     if (air && !prev.air) sd.jump();
     if (!air && prev.air && player.state === 'driving') sd.land();
     if (this.readyAt && performance.now() >= this.readyAt) { this.readyAt = 0; if (player.item) sd.ready(); }
@@ -645,7 +645,7 @@ export class Game {
 
   /** Dust from the rear wheels (more on sand / with turbo) and turbo flames from the exhausts. */
   emitCarParticles(car, v, dt) {
-    const onGround = car.state === 'driving' && car.h < 0.3 + this.track.groundHeight(car.s);
+    const onGround = car.state === 'driving' && car.h < 0.3 + this.track.groundHeight(car.s, car.route);
     const turbo = car.turboT > 0 || car.boostT > 0;
     for (const f of v.flames) f.visible = turbo && car.state === 'driving';
     if (turbo && car.state === 'driving') for (const f of v.flames) f.scale.set(1, 0.7 + Math.random() * 0.6, 1);
@@ -686,19 +686,19 @@ export class Game {
       } else if (e.type === 'flattened') {
         const c = this.world.cars.find((x) => x.id === e.carId);
         this.sound.at(dist(e.s), (v) => this.sound.squash(v));
-        T.toWorld(e.s, e.d, 0.4, tmp);
+        T.toWorld(e.s, e.d, 0.4, tmp, e.route || 0);
         for (let q = 0; q < 10; q++) this.particles.emit(tmp.x, tmp.y, tmp.z, (Math.random() - 0.5) * 8, 0.5 + Math.random() * 2, (Math.random() - 0.5) * 8,
           { size: 0.7 + Math.random() * 0.6, life: 0.7, color: 0xb9a58c, alpha: 0.6, grow: 2, drag: 2.5, up: 0.5 });
         if (c === p) { navigator.vibrate?.([60, 40, 140]); this.rig.shake(0.35); }
       } else if (e.type === 'explosion') {
         this.sound.at(dist(e.s), this.sound.explosion);
-        T.toWorld(e.s, e.d, 0.8, tmp);
+        T.toWorld(e.s, e.d, 0.8, tmp, e.route || 0);
         this.effects.explosion(tmp.x, tmp.y, tmp.z);
         for (let q = 0; q < 14; q++) this.particles.emit(tmp.x, tmp.y, tmp.z, (Math.random() - 0.5) * 12, 2 + Math.random() * 7, (Math.random() - 0.5) * 12,
           { size: 0.5 + Math.random() * 0.6, life: 0.6 + Math.random() * 0.5, color: q % 3 === 0 ? 0x2a2a2a : q % 3 === 1 ? 0xff8a1f : 0xc9a36b, alpha: 0.85, grow: 1.4, drag: 1.2, up: -9 });
         if (Math.abs(e.s - target.s) < 25) this.rig.shake(0.18);
       } else if (e.type === 'collide') {
-        T.toWorld(e.s, e.d, 0.6, tmp);
+        T.toWorld(e.s, e.d, 0.6, tmp, e.route || 0);
         const n = 6 + Math.min(8, Math.round(e.strength * 0.5));
         for (let q = 0; q < n; q++) this.particles.emit(tmp.x, tmp.y, tmp.z, (Math.random() - 0.5) * 9, 1 + Math.random() * 4, (Math.random() - 0.5) * 9,
           { size: 0.22 + Math.random() * 0.18, life: 0.2 + Math.random() * 0.15, color: q % 2 ? 0xffffff : 0xffd45a, alpha: 1, grow: 0.3, drag: 2, up: -7 });
@@ -716,11 +716,11 @@ export class Game {
         this.sound.at(dist(c.s), (v) => this.sound.use(e.item, v));
       } else if (e.type === 'shield') {
         const c = this.world.cars.find((x) => x.id === e.carId);
-        T.toWorld(c.s, c.d, 1, tmp); this.effects.puff(tmp.x, tmp.y, tmp.z);
+        T.toWorld(c.s, c.d, 1, tmp, c.route || 0); this.effects.puff(tmp.x, tmp.y, tmp.z);
         if (c === p) this.sound.shieldBlock();
       } else if (e.type === 'pickup') {
         const b = this.world.boxes[e.boxId];
-        T.toWorld(b.s, b.d, 1.3, tmp); this.effects.sparkle(tmp.x, tmp.y, tmp.z);
+        T.toWorld(b.s, b.d, 1.3, tmp, b.route || 0); this.effects.sparkle(tmp.x, tmp.y, tmp.z);
         if (e.carId === p.id) { this.sound.pickup(); this.sound.roulette(); this.readyAt = performance.now() + 800; }
         // online: ask the room for the box (first come, first served); if somebody else was faster the item is taken back
         if (this.net && this.world.online && this.world.cars.find((x) => x.id === e.carId)?.owner === 'local') this.net.send({ t: 'box_take', b: e.boxId, c: e.carId });
@@ -745,13 +745,13 @@ export class Game {
     const T = this.track;
     this.world.cars.forEach((car, i) => {
       const v = this.views[i];
-      const sm = T.sample(car.s, this.tmpSample);
-      T.toWorld(car.s, car.d, car.h, this.tmpWorld);
+      const sm = T.sample(car.s, this.tmpSample, car.route);
+      T.toWorld(car.s, car.d, car.h, this.tmpWorld, car.route);
       const heading = sm.heading + car.yaw;
       v.root.position.set(this.tmpWorld.x, this.tmpWorld.y, this.tmpWorld.z);
       let pitch = Math.atan2(sm.ty, Math.hypot(sm.tx, sm.tz));
-      const gh = T.groundHeight(car.s);
-      if (car.h <= gh + 0.05) pitch += Math.atan(T.groundSlope(car.s));                          // driving up a ramp
+      const gh = T.groundHeight(car.s, car.route);
+      if (car.h <= gh + 0.05) pitch += Math.atan(T.groundSlope(car.s, car.route));                          // driving up a ramp
       else if (car.state === 'driving' && !car.hit.kind) pitch += Math.max(-0.35, Math.min(0.35, car.vy * 0.03));   // nose follows the flight
       v.root.rotation.set(pitch, -heading, 0, 'YXZ');
       const k = car.hit.kind;

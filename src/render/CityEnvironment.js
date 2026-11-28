@@ -87,6 +87,10 @@ export function buildCityEnvironment(track, scene) {
 
   const road = [];
   for (let i = 0; i < track.samples.length; i += 3) road.push(track.samples[i]);
+  // every branch is a road too (buildings keep clear of it), and the secret door's own building replaces the ones near it
+  const keepClear = [];
+  for (const b of track.branches) for (let i = 0; i < b.samples.length; i += 3) keepClear.push([b.samples[i], b.hw + 9]);
+  for (const b of track.branches) if (b.building) for (let sv = b.building.s0 - 20; sv <= b.building.s1 + 20; sv += 8) for (let d = b.building.dIn + 6; d >= b.building.dOut - 8; d -= 8) { const p = track.sample(sv); keepClear.push([{ px: p.px + p.rx * d, pz: p.pz + p.rz * d }, 12]); }
   const nearest = (x, z) => { let best = road[0], bd = Infinity; for (const p of road) { const d = (p.px - x) ** 2 + (p.pz - z) ** 2; if (d < bd) { bd = d; best = p; } } return { p: best, d: Math.sqrt(bd) }; };
   const [fRes, fBrick, fGlass] = [geo(), geo(), geo()], F = [fRes, fBrick, fGlass], shopG = geo(), roofG = geo(), propG = geo(), tankG = geo();
   const tints = [[1, 0.96, 0.92], [0.95, 0.88, 0.9], [1, 0.9, 0.8], [0.9, 0.92, 1], [1, 1, 1]];
@@ -96,6 +100,7 @@ export function buildCityEnvironment(track, scene) {
     const jx = x + (rnd() - 0.5) * 8, jz = z + (rnd() - 0.5) * 8, w = 14 + rnd() * 12, d = 14 + rnd() * 12;
     const { p, d: dist } = nearest(jx, jz);
     if (dist < clear + Math.max(w, d) * 0.6) continue;
+    if (keepClear.some(([q, r]) => (q.px - jx) ** 2 + (q.pz - jz) ** 2 < (r + Math.max(w, d) * 0.6) ** 2)) continue;
     const street = dist < clear + 28, far = Math.hypot(jx - cx, jz - cz) > 420;
     const kind = far ? (rnd() < 0.7 ? 2 : 0) : (rnd() < 0.55 ? 0 : 1);
     const floors = far ? 10 + ((rnd() * 22) | 0) : 3 + ((rnd() * 6) | 0), h = floors * 3.5;
